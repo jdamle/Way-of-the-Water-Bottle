@@ -149,8 +149,8 @@ void TIM6_DAC_IRQHandler(void)
 }
 void init_adc(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0x300;
-    GPIOA->MODER |= 0x300;
+    GPIOA->MODER &= ~0xc00;
+    GPIOA->MODER |= 0xc00;
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON;
     while(!(RCC->CR2 & RCC_CR2_HSI14ON));
@@ -159,7 +159,7 @@ void init_adc(void) {
     while((ADC1->CR & ADC_CR_ADSTART));
     while (1) {
         ADC1->CHSELR = 0;
-        ADC1->CHSELR |= 1<<4;
+        ADC1->CHSELR |= 1<<3;
         while(!(ADC1->ISR & ADC_ISR_ADRDY));
         ADC1->CR |= ADC_CR_ADSTART;
         while(!(ADC1->ISR & ADC_ISR_EOC));
@@ -185,7 +185,32 @@ void init_dac(void) {
     DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1;
 }
 
+void init_usart5(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOCEN | RCC_AHBENR_GPIODEN;
+    GPIOC->MODER &= ~0x3000000;
+    GPIOC->MODER |= 0x2000000;
+    GPIOC->AFR[1] |= 0x20000;
+    GPIOD->MODER &= ~0x30;
+    GPIOD->MODER |= 0x20;
+    GPIOD->AFR[0] |= 0x200;
 
+    RCC->APB1ENR |= RCC_APB1ENR_USART5EN;
+    USART5->CR1 |= ~USART_CR1_UE;
+    USART5->CR1 |= ~(1<<28);
+    USART5->CR1 &= ~USART_CR1_M;
+    USART5->CR2 &= ~(USART_CR2_STOP_0);
+    USART5->CR2 &= ~USART_CR2_STOP_1;
+    USART5->CR1 &= ~USART_CR1_PCE;
+    USART5->CR1 &= ~USART_CR1_OVER8;
+    USART5->BRR = 0x2580;
+    USART5->CR1 |= USART_CR1_TE | USART_CR1_RE;
+    USART5->CR1 |= USART_CR1_UE;
+    while(!(USART5->ISR & USART_ISR_TEACK) || !(USART5->ISR & USART_ISR_REACK)) {
+
+    }
+}
+//#define REGULAR_TEST
+#if defined(REGULAR_TEST)
 int main(void)
 {
     sample = 0;
@@ -201,3 +226,45 @@ int main(void)
 
 
 }
+#endif
+
+#define TEST_UART
+#if defined(TEST_UART)
+#include <stdio.h>
+int __io_putchar(int c) {
+    if(c == '\n') {
+        while(!(USART5->ISR & USART_ISR_TXE)) { }
+        USART5->TDR = '\r';
+
+    }
+    while(!(USART5->ISR & USART_ISR_TXE)) { }
+    USART5->TDR = c;
+    return c;
+}
+
+int __io_getchar(void) {
+     while (!(USART5->ISR & USART_ISR_RXNE)) { }
+     char c = USART5->RDR;
+     if(c =='\r') {
+         c = '\n';
+     }
+     __io_putchar(c);
+     return c;
+}
+
+int main() {
+    init_usart5();
+    setbuf(stdin,0);
+    setbuf(stdout,0);
+    setbuf(stderr,0);
+    printf("Enter your name: ");
+    char name[80];
+    fgets(name, 80, stdin);
+    printf("Your name is %s", name);
+    printf("Type any characters.\n");
+    for(;;) {
+        char c = getchar();
+        putchar(c);
+    }
+}
+#endif
