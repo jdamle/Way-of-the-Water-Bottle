@@ -402,7 +402,7 @@ int main(void) {
 #endif
 
     // SPI
-#define SPI_OLED_DMA
+//#define SPI_OLED_DMA
 #if defined(SPI_OLED_DMA)
     init_spi1();
     spi1_init_oled();

@@ -148,9 +148,13 @@ void TIM6_DAC_IRQHandler(void)
 
 }
 void init_adc(void) {
+    init_spi1();
+    spi1_init_oled();
+    char line[21];
+    float volt;
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0xc00;
-    GPIOA->MODER |= 0xc00;
+    GPIOA->MODER &= ~0xc0;
+    GPIOA->MODER |= 0xc0;
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON;
     while(!(RCC->CR2 & RCC_CR2_HSI14ON));
@@ -163,6 +167,14 @@ void init_adc(void) {
         while(!(ADC1->ISR & ADC_ISR_ADRDY));
         ADC1->CR |= ADC_CR_ADSTART;
         while(!(ADC1->ISR & ADC_ISR_EOC));
+        volt = (float)(ADC1->DR) * 3 / 4095.0;
+        sprintf(line, "%2.2f", volt);
+        spi1_display1(line);
+
+
+
+
+
 
     }
 
@@ -202,23 +214,24 @@ void init_usart5(void) {
     USART5->CR2 &= ~USART_CR2_STOP_1;
     USART5->CR1 &= ~USART_CR1_PCE;
     USART5->CR1 &= ~USART_CR1_OVER8;
-    USART5->BRR = 0x2580;
+    USART5->BRR = 0x000000a1;
     USART5->CR1 |= USART_CR1_TE | USART_CR1_RE;
     USART5->CR1 |= USART_CR1_UE;
     while(!(USART5->ISR & USART_ISR_TEACK) || !(USART5->ISR & USART_ISR_REACK)) {
 
     }
 }
-//#define REGULAR_TEST
+#define REGULAR_TEST
 #if defined(REGULAR_TEST)
 int main(void)
 {
-    sample = 0;
-    init_tim6();
-    init_spi1();
-    spi1_init_oled();
-    spi1_display1("Good Day! ");
-    init_dac();
+    //sample = 0;
+    //init_tim6();
+    //init_spi1();
+    //spi1_init_oled();
+    //spi1_display1("Good Day! ");
+    init_adc();
+    //init_dac();
 /*    init_spi1();
     spi1_init_oled();
     spi1_display1("Hello there,");
@@ -228,7 +241,7 @@ int main(void)
 }
 #endif
 
-#define TEST_UART
+//#define TEST_UART
 #if defined(TEST_UART)
 #include <stdio.h>
 int __io_putchar(int c) {
