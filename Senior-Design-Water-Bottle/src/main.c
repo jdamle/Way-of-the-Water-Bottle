@@ -147,36 +147,91 @@ void TIM6_DAC_IRQHandler(void)
 
 
 }
+void init_tim2(void) {
+    RCC->APB1ENR |= 0x0000001;
+    TIM2->PSC = 4800-1;
+    TIM2->ARR = 1000-1;
+    TIM2->DIER |= 1<<0;
+    TIM2->CR1 |= 1<<0;
+    NVIC->ISER[0] = 1<<15;
+}
+void init_tim3(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    TIM3->PSC = 4800 - 1;
+    TIM3->ARR = 1000 - 1;
+    TIM3->DIER |= 1<<0;
+    TIM3->CR1 |= 1<<0;
+    NVIC->ISER[0] = 1<<16;
+}
+float volt1;
+char line1[21];
+float volt2;
+char line2[21];
+
+void TIM2_IRQHandler(void) {
+    TIM2->SR &= ~1<<0;
+    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 3;
+    ADC1->CR |= ADC_CR_ADSTART;
+    while(!(ADC1->ISR & ADC_ISR_EOC));
+    volt1 = (float)(ADC1->DR) * 3 / 4095.0;
+    sprintf(line1, "%2.2f", volt1);
+    spi1_display1(line1);
+}
+void TIM3_IRQHandler(void) {
+    TIM3->SR &= ~1<<0;
+    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 2;
+    ADC1->CR |= ADC_CR_ADSTART;
+    while(!(ADC1->ISR & ADC_ISR_EOC));
+    volt2 = (float)(ADC1->DR) * 3 / 4095.0;
+    sprintf(line2, "%2.2f", volt2);
+    spi1_display2(line2);
+
+}
 void init_adc(void) {
-    init_spi1();
+/*    init_spi1();
     spi1_init_oled();
-    char line[21];
-    float volt;
+    char line1[21];
+    char line2[21];
+    float volt1;
+    float volt2;*/
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0xc0;
-    GPIOA->MODER |= 0xc0;
+    GPIOA->MODER &= ~0xf0;
+    GPIOA->MODER |= 0xf0;
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON;
     while(!(RCC->CR2 & RCC_CR2_HSI14ON));
     ADC1->CR |= ADC_CR_ADEN;
     while(!(ADC1->ISR & ADC_ISR_ADRDY));
     while((ADC1->CR & ADC_CR_ADSTART));
-    while (1) {
+/*    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 3;*/
+    while(!(ADC1->ISR & ADC_ISR_ADRDY));
+/*    while (1) {
         ADC1->CHSELR = 0;
         ADC1->CHSELR |= 1<<3;
         while(!(ADC1->ISR & ADC_ISR_ADRDY));
         ADC1->CR |= ADC_CR_ADSTART;
         while(!(ADC1->ISR & ADC_ISR_EOC));
-        volt = (float)(ADC1->DR) * 3 / 4095.0;
-        sprintf(line, "%2.2f", volt);
-        spi1_display1(line);
+        volt1 = (float)(ADC1->DR) * 3 / 4095.0;
+        sprintf(line1, "%2.2f", volt1);
+        spi1_display1(line1);
+        ADC1->CHSELR = 0;
+        ADC1->CHSELR |= 1 << 2;
+        while(!(ADC1->ISR & ADC_ISR_ADRDY));
+        ADC1->CR |= ADC_CR_ADSTART;
+        while(!(ADC1->ISR & ADC_ISR_EOC));
+        volt2 = (float)(ADC1->DR) * 3 / 4095.0;
+        sprintf(line2, "%2.2f", volt2);
+        spi1_display2(line2);*/
 
 
 
 
 
 
-    }
+
 
 }
 void init_dac(void) {
@@ -227,9 +282,11 @@ int main(void)
 {
     //sample = 0;
     //init_tim6();
-    //init_spi1();
-    //spi1_init_oled();
+    init_spi1();
+    spi1_init_oled();
     //spi1_display1("Good Day! ");
+    init_tim2();
+    init_tim3();
     init_adc();
     //init_dac();
 /*    init_spi1();
