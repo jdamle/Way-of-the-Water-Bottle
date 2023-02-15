@@ -330,12 +330,21 @@ int main(void)
 {
     //sample = 0;
     //init_tim6();
+<<<<<<< HEAD
 //    init_spi1();
 //    spi1_init_oled();
     //spi1_display1("Good Day! ");
 //    init_tim2();
 //    init_tim3();
 //    init_adc();
+=======
+    init_spi1();
+    spi1_init_oled();
+    //spi1_display1("Good Day! ");
+    init_tim2();
+    init_tim3();
+    init_adc();
+>>>>>>> refs/remotes/origin/main
     //init_dac();
 /*    init_spi1();
     spi1_init_oled();
