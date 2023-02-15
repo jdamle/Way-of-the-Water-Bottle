@@ -294,34 +294,56 @@ void time_w0(float time, GPIO_TypeDef* GPIO, int pin_num)
     GPIO -> BSRR |= 0x1 << pin_num;
 }
 
-void write_rom_code(int code, GPIO_TypeDef* GPIO, int pin_num)
+void write_code(int code, GPIO_TypeDef* GPIO, int pin_num)
 {
     for (int i = 0; i < 8; i++)
     {
         //nano_wait(1 * 1000); // 1us recovery
-        if (!(code & (0x1 << 7-i)))
+        if (!(code & (0x1 << i)))
         {
-            time_w0(120, GPIO, pin_num);
+            time_w0(117, GPIO, pin_num);
+            nano_wait(3 * 1000);
         }
         else
         {
-            time_w0(2, GPIO, pin_num);
-            nano_wait(118 * 1000);
+            time_w0(1, GPIO, pin_num);
+            nano_wait(119 * 1000);
         }
     }
+}
+
+int read_bit_tmp(void)
+{
+
+}
+
+int read_byte_tmp(void)
+{
+
+}
+
+int read_scratchpad_tmp(void)
+{
+
 }
 
 // return 0 for success and return 1 for failure
 int temp_talk(GPIO_TypeDef* GPIO, int pin_num)
 {
     // Initialization
-    time_w0(480, GPIO, pin_num);
-    /*
-     * Code confirmation for presence detect
-     * while (GPIO -> ODR | (0x1 << pin_num))
-     */
-    nano_wait((60 + 240) * 1000);
-    write_rom_code(0x33, GPIO, pin_num);
+    time_w0(480, GPIO, pin_num); // Minimum of hold low 480 us
+    nano_wait(60 * 1000); // Maximum of 60 us wait before sends back pull low confirmation
+    if (GPIO -> IDR & (0x1 << pin_num))
+    {
+        return 1;
+    }
+    nano_wait(240 * 1000); // Holds low for maximum of 240 us
+
+    // Rom commands
+    write_code(0xCC, GPIO, pin_num);
+
+    // Function commands
+    write_code(0xBE, GPIO, pin_num);
 }
 
 #define REGULAR_TEST
@@ -330,21 +352,12 @@ int main(void)
 {
     //sample = 0;
     //init_tim6();
-<<<<<<< HEAD
-//    init_spi1();
-//    spi1_init_oled();
+    init_spi1();
+    spi1_init_oled();
     //spi1_display1("Good Day! ");
 //    init_tim2();
 //    init_tim3();
 //    init_adc();
-=======
-    init_spi1();
-    spi1_init_oled();
-    //spi1_display1("Good Day! ");
-    init_tim2();
-    init_tim3();
-    init_adc();
->>>>>>> refs/remotes/origin/main
     //init_dac();
 /*    init_spi1();
     spi1_init_oled();
