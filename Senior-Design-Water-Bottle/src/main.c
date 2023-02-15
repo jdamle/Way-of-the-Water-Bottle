@@ -96,7 +96,6 @@ void spi1_display2(const char *string) {
 };
 void spi1_setup_dma(void) {
     DMA1_Channel3 -> CCR &= ~DMA_CCR_EN; // Turn off the enable bit for the channel
-
     RCC -> AHBENR |= RCC_AHBENR_DMA1EN;
     DMA1_Channel3 -> CPAR = (uint32_t) &(SPI1 -> DR);
     DMA1_Channel3 -> CMAR = (uint32_t) display;
@@ -147,36 +146,91 @@ void TIM6_DAC_IRQHandler(void)
 
 
 }
+void init_tim2(void) {
+    RCC->APB1ENR |= 0x0000001;
+    TIM2->PSC = 4800-1;
+    TIM2->ARR = 1000-1;
+    TIM2->DIER |= 1<<0;
+    TIM2->CR1 |= 1<<0;
+    NVIC->ISER[0] = 1<<15;
+}
+void init_tim3(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    TIM3->PSC = 4800 - 1;
+    TIM3->ARR = 1000 - 1;
+    TIM3->DIER |= 1<<0;
+    TIM3->CR1 |= 1<<0;
+    NVIC->ISER[0] = 1<<16;
+}
+float volt1;
+char line1[21];
+float volt2;
+char line2[21];
+
+void TIM2_IRQHandler(void) {
+    TIM2->SR &= ~1<<0;
+    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 3;
+    ADC1->CR |= ADC_CR_ADSTART;
+    while(!(ADC1->ISR & ADC_ISR_EOC));
+    volt1 = (float)(ADC1->DR) * 3 / 4095.0;
+    sprintf(line1, "%2.2f", volt1);
+    spi1_display1(line1);
+}
+void TIM3_IRQHandler(void) {
+    TIM3->SR &= ~1<<0;
+    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 2;
+    ADC1->CR |= ADC_CR_ADSTART;
+    while(!(ADC1->ISR & ADC_ISR_EOC));
+    volt2 = (float)(ADC1->DR) * 3 / 4095.0;
+    sprintf(line2, "%2.2f", volt2);
+    spi1_display2(line2);
+
+}
 void init_adc(void) {
-    init_spi1();
+/*    init_spi1();
     spi1_init_oled();
-    char line[21];
-    float volt;
+    char line1[21];
+    char line2[21];
+    float volt1;
+    float volt2;*/
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0xc0;
-    GPIOA->MODER |= 0xc0;
+    GPIOA->MODER &= ~0xf0;
+    GPIOA->MODER |= 0xf0;
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON;
     while(!(RCC->CR2 & RCC_CR2_HSI14ON));
     ADC1->CR |= ADC_CR_ADEN;
     while(!(ADC1->ISR & ADC_ISR_ADRDY));
     while((ADC1->CR & ADC_CR_ADSTART));
-    while (1) {
+/*    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1 << 3;*/
+    while(!(ADC1->ISR & ADC_ISR_ADRDY));
+/*    while (1) {
         ADC1->CHSELR = 0;
         ADC1->CHSELR |= 1<<3;
         while(!(ADC1->ISR & ADC_ISR_ADRDY));
         ADC1->CR |= ADC_CR_ADSTART;
         while(!(ADC1->ISR & ADC_ISR_EOC));
-        volt = (float)(ADC1->DR) * 3 / 4095.0;
-        sprintf(line, "%2.2f", volt);
-        spi1_display1(line);
+        volt1 = (float)(ADC1->DR) * 3 / 4095.0;
+        sprintf(line1, "%2.2f", volt1);
+        spi1_display1(line1);
+        ADC1->CHSELR = 0;
+        ADC1->CHSELR |= 1 << 2;
+        while(!(ADC1->ISR & ADC_ISR_ADRDY));
+        ADC1->CR |= ADC_CR_ADSTART;
+        while(!(ADC1->ISR & ADC_ISR_EOC));
+        volt2 = (float)(ADC1->DR) * 3 / 4095.0;
+        sprintf(line2, "%2.2f", volt2);
+        spi1_display2(line2);*/
 
 
 
 
 
 
-    }
+
 
 }
 void init_dac(void) {
@@ -221,23 +275,74 @@ void init_usart5(void) {
 
     }
 }
+
+// Need to make all temp transactions atomic
+void init_temp(void)
+{
+    RCC -> AHBENR   |= RCC_AHBENR_GPIOCEN;
+    GPIOC -> MODER  &= ~0x30000;
+    GPIOC -> MODER  |=  0x10000; // Output mode 01 for pin PC8
+    GPIOC -> PUPDR  &=  0x0;
+    GPIOC -> OTYPER |=  0x1 << 8;   // Set pin PC8 open drain
+}
+
+// time in us
+void time_w0(float time, GPIO_TypeDef* GPIO, int pin_num)
+{
+    GPIO -> BRR  |= 0x1 << pin_num;
+    nano_wait(time * 1000);
+    GPIO -> BSRR |= 0x1 << pin_num;
+}
+
+void write_rom_code(int code, GPIO_TypeDef* GPIO, int pin_num)
+{
+    for (int i = 0; i < 8; i++)
+    {
+        //nano_wait(1 * 1000); // 1us recovery
+        if (!(code & (0x1 << 7-i)))
+        {
+            time_w0(120, GPIO, pin_num);
+        }
+        else
+        {
+            time_w0(2, GPIO, pin_num);
+            nano_wait(118 * 1000);
+        }
+    }
+}
+
+// return 0 for success and return 1 for failure
+int temp_talk(GPIO_TypeDef* GPIO, int pin_num)
+{
+    // Initialization
+    time_w0(480, GPIO, pin_num);
+    /*
+     * Code confirmation for presence detect
+     * while (GPIO -> ODR | (0x1 << pin_num))
+     */
+    nano_wait((60 + 240) * 1000);
+    write_rom_code(0x33, GPIO, pin_num);
+}
+
 #define REGULAR_TEST
 #if defined(REGULAR_TEST)
 int main(void)
 {
     //sample = 0;
     //init_tim6();
-    //init_spi1();
-    //spi1_init_oled();
+//    init_spi1();
+//    spi1_init_oled();
     //spi1_display1("Good Day! ");
-    init_adc();
+//    init_tim2();
+//    init_tim3();
+//    init_adc();
     //init_dac();
 /*    init_spi1();
     spi1_init_oled();
     spi1_display1("Hello there,");
     spi1_display2(test);*/
-
-
+    init_temp();
+    temp_talk(GPIOC, 8);
 }
 #endif
 
