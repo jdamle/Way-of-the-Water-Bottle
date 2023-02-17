@@ -72,6 +72,8 @@ void spi1_init_oled() {
     spi_cmd(0x02);
     spi_cmd(0x0c);
 }
+
+// Top row
 void spi1_display1(const char *string) {
     spi_cmd(0x02);
     while(*string != '\0') {
@@ -79,6 +81,8 @@ void spi1_display1(const char *string) {
         string++;
     }
 }
+
+// Bottom row
 void spi1_display2(const char *string) {
     spi_cmd(0xc0);
     while(*string != '\0') {
@@ -224,15 +228,8 @@ void init_adc(void) {
         volt2 = (float)(ADC1->DR) * 3 / 4095.0;
         sprintf(line2, "%2.2f", volt2);
         spi1_display2(line2);*/
-
-
-
-
-
-
-
-
 }
+
 void init_dac(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
     GPIOA->MODER &= ~0x300;
@@ -276,16 +273,6 @@ void init_usart5(void) {
     }
 }
 
-// Need to make all temp transactions atomic
-void init_temp(void)
-{
-    RCC -> AHBENR   |= RCC_AHBENR_GPIOCEN;
-    GPIOC -> MODER  &= ~0x30000;
-    GPIOC -> MODER  |=  0x10000; // Output mode 01 for pin PC8
-    GPIOC -> PUPDR  &=  0x0;
-    GPIOC -> OTYPER |=  0x1 << 8;   // Set pin PC8 open drain
-}
-
 // time in us
 void time_w0(float time, GPIO_TypeDef* GPIO, int pin_num)
 {
@@ -294,7 +281,7 @@ void time_w0(float time, GPIO_TypeDef* GPIO, int pin_num)
     GPIO -> BSRR |= 0x1 << pin_num;
 }
 
-void write_code(int code, GPIO_TypeDef* GPIO, int pin_num)
+void write_byte(int code, GPIO_TypeDef* GPIO, int pin_num)
 {
     for (int i = 0; i < 8; i++)
     {
@@ -312,23 +299,27 @@ void write_code(int code, GPIO_TypeDef* GPIO, int pin_num)
     }
 }
 
-int read_bit_tmp(void)
+int read_bit_tmp(GPIO_TypeDef* GPIO, int pin_num)
 {
-
+    time_w0(1, GPIO, pin_num);
+    nano_wait(13 * 1000); // Master needs to sample within 15 us of when the read was initiated
+    int bit_read = (GPIO -> IDR & (0x1 << pin_num)) >> pin_num;
+    nano_wait(45 * 1000); // Read slot minimum of 60 us total
+    return bit_read;
 }
 
-int read_byte_tmp(void)
+int read_byte_tmp(GPIO_TypeDef* GPIO, int pin_num)
 {
-
-}
-
-int read_scratchpad_tmp(void)
-{
-
+    int final_byte = 0x00;
+    for (int i = 0; i < 8; i++)
+    {
+        final_byte |= read_bit_tmp(GPIO, pin_num) << i;
+    }
+    return final_byte;
 }
 
 // return 0 for success and return 1 for failure
-int temp_talk(GPIO_TypeDef* GPIO, int pin_num)
+int temp_talk_start(GPIO_TypeDef* GPIO, int pin_num)
 {
     // Initialization
     time_w0(480, GPIO, pin_num); // Minimum of hold low 480 us
@@ -340,10 +331,58 @@ int temp_talk(GPIO_TypeDef* GPIO, int pin_num)
     nano_wait(240 * 1000); // Holds low for maximum of 240 us
 
     // Rom commands
-    write_code(0xCC, GPIO, pin_num);
+    write_byte(0xCC, GPIO, pin_num); // 0xCC skip rom command
+
+    return 0;
+}
+
+// Need to make all temp transactions atomic
+int temp_init(GPIO_TypeDef* GPIO, int pin_num)
+{
+    int success = 0;
+
+    // Set up GPIO
+    RCC -> AHBENR   |= RCC_AHBENR_GPIOCEN;
+    GPIOC -> MODER  &= ~0x30000;
+    GPIOC -> MODER  |=  0x10000; // Output mode 01 for pin PC8
+    GPIOC -> PUPDR  &=  0x0;
+    GPIOC -> OTYPER |=  0x1 << 8;   // Set pin PC8 open drain
+
+    success |= temp_talk_start(GPIO, pin_num);
 
     // Function commands
-    write_code(0xBE, GPIO, pin_num);
+    write_byte(0x4E, GPIO, pin_num); // write to scratch pad
+    write_byte(0xB0, GPIO, pin_num); // write TH (high temp alarm) 0xB0
+    write_byte(0x64, GPIO, pin_num); // write TL (low temp alarm) 0x64
+    write_byte(0x1F, GPIO, pin_num); // cfg to 9 bit resolution (least accurate but fastest)
+    // 0 [00] 11111 => 00 cfg bits the rest are reserved
+
+    return success;
+}
+
+float get_temp(GPIO_TypeDef* GPIO, int pin_num)
+{
+    float final_temp = 0;
+
+    temp_talk_start(GPIO, pin_num);
+    write_byte(0x44, GPIO, pin_num);
+    for(int i = 0; i < 2000 & !read_bit_tmp(GPIO, pin_num); i++); // max conversion time about 100 ms
+
+    temp_talk_start(GPIO, pin_num);
+    write_byte(0xBE, GPIO, pin_num);
+    int tmp_bits = read_byte_tmp(GPIO, pin_num);
+    tmp_bits |= read_byte_tmp(GPIO, pin_num) << 8;
+
+    char debug_out[21];
+    sprintf(debug_out, "0x%08X", tmp_bits);
+    spi1_display1(debug_out);
+
+    final_temp = ((float)tmp_bits) * 0.5;
+    char debug_out2[21];
+    sprintf(debug_out2, "%2.2f", tmp_bits);
+    spi1_display2(debug_out2);
+
+    return final_temp;
 }
 
 #define REGULAR_TEST
@@ -363,8 +402,8 @@ int main(void)
     spi1_init_oled();
     spi1_display1("Hello there,");
     spi1_display2(test);*/
-    init_temp();
-    temp_talk(GPIOC, 8);
+    temp_init(GPIOC, 8);
+    get_temp(GPIOC, 8);
 }
 #endif
 
