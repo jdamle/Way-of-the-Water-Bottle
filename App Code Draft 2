@@ -3,6 +3,7 @@ import { Text, TextInput, View, Button, Image, StyleSheet, SafeAreaView} from 'r
 import { NavigationContainer } from '@react-navigation/native';
 import { createStackNavigator } from '@react-navigation/stack';
 
+// creating home screen and navigation
 function HomeScreen({ navigation, route }) {
   React.useEffect(() => {
     if (route.params?.post) {
@@ -11,6 +12,7 @@ function HomeScreen({ navigation, route }) {
     }
   }, [route.params?.post]);
 
+// Setting up menu interface
   return (
       <SafeAreaView style={{ flex: 1}}>
       {/* Menu Title */}
@@ -19,7 +21,7 @@ function HomeScreen({ navigation, route }) {
           Menu
         </Text>
 
-          {/* Logo */}
+          {/* Logo and importing image */}
           <Image
             source={{
               uri:
@@ -40,11 +42,11 @@ function HomeScreen({ navigation, route }) {
         </Text>
 
       <View style={styles.container1}>
-      {/* Button whith handler function named onPressLearnMore*/}
+      {/* Button whith handler function that causes it to move to next page*/}
       <Button onPress={() => navigation.navigate('CreatePost')} title="SCHEDULE" color="#100" />
       </View>
       <View style={styles.container1}>
-      {/* Button whith handler function named onPressLearnMore*/}
+      {/* Button with handler function that causes it to move to the next page*/}
       <Button onPress={() => navigation.navigate('CreateTemperature')} title="TEMPERATURE" color="#100" />
       </View>
 
@@ -53,7 +55,7 @@ function HomeScreen({ navigation, route }) {
 
   );
 }
-
+// create new page interface
 function CreatePostScreen({ navigation, route }) {
   const [postText, setPostText] = React.useState('');
 
@@ -77,6 +79,7 @@ function CreatePostScreen({ navigation, route }) {
   );
 }
 
+//creating temperature page interface
 function CreateTemperatureScreen({ navigation, route }) {
   const [postText, setPostText] = React.useState('');
 
@@ -110,7 +113,7 @@ function CreateTemperatureScreen({ navigation, route }) {
 }
 
 const Stack = createStackNavigator();
-
+// create navigation path and layer screens
 export default function App() {
   return (
     <NavigationContainer>
@@ -123,6 +126,7 @@ export default function App() {
   );
 }
 
+// create styles of interfaces
 const styles = StyleSheet.create({
   container: {
     flex: 1,
