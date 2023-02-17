@@ -373,14 +373,14 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
     int tmp_bits = read_byte_tmp(GPIO, pin_num);
     tmp_bits |= read_byte_tmp(GPIO, pin_num) << 8;
 
-    char debug_out[21];
-    sprintf(debug_out, "0x%08X", tmp_bits);
-    spi1_display1(debug_out);
+    //char debug_out[21];
+    //sprintf(debug_out, "0x%08X", tmp_bits);
+    //spi1_display1(debug_out);
 
-    final_temp = ((float)tmp_bits) * 0.5;
-    char debug_out2[21];
-    sprintf(debug_out2, "%2.2f", tmp_bits);
-    spi1_display2(debug_out2);
+    final_temp = ((float)(tmp_bits >> 3)) * 0.5;
+    //char debug_out2[21];
+    //sprintf(debug_out2, "%2.2f", final_temp);
+    //spi1_display2(debug_out2);
 
     return final_temp;
 }
