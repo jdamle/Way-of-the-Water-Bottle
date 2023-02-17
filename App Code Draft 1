@@ -1,0 +1,108 @@
+import * as React from 'react';
+import { Image, Text, View, StyleSheet, Button, SafeAreaView} from 'react-native';
+import Constants from 'expo-constants';
+import { NavigationContainer } from '@react-navigation/native';
+//import { createStackNavigator } from '@react-navigation/stack';
+
+// You can import from local files
+
+
+// or any pure javascript modules available in npm
+
+export default function App() {
+   const onPressLearnMore = () => {
+    //For generating alert on buttton click
+    alert('New Page: Schedule Menu');
+  }; 
+    const onPressLearnMore1 = () => {
+    //For generating alert on buttton click
+    alert('New Page: Temperature');
+  }; 
+     const onPressLearnMore2 = () => {
+    //For generating alert on buttton click
+    alert('New Page: Water Quality');
+  }; 
+     const onPressLearnMore3 = () => {
+    //For generating alert on buttton click
+    alert('New Page: Water Goal');
+  }; 
+  return (
+    <SafeAreaView style={{ flex: 1}}>
+      {/* Menu Title */}
+      <View style={styles.container}>
+        <Text style={styles.paragraph}>
+          Menu
+        </Text>
+
+          {/* Logo */}
+          <Image
+            source={{
+              uri:
+              'https://i.postimg.cc/kgmFSHGw/Untitled-Artwork.jpg',
+          }}
+            style={{ width: 200, height: 200, margin: 90}}
+        />
+
+        {/*input text stastics from microcontroller*/}
+        <Text style={styles.subtext}>
+        Current Temperature:
+        </Text>
+        <Text style={styles.subtext}>
+        Waterbottle Water Level:
+        </Text>
+        <Text style={styles.subtext}>
+        How much water left for goal:
+        </Text>
+
+        <View style={styles.container1}>
+        {/* Button whith handler function named onPressLearnMore*/}
+        <Button onPress={onPressLearnMore} title="SCHEDULE" color="#100" />
+        </View>
+        <View style={styles.container1}>
+        {/* Button whith handler function named onPressLearnMore*/}
+        <Button onPress={onPressLearnMore1} title="TEMPERATURE" color="#100" />
+        </View>
+        <View style={styles.container1}>
+        {/* Button whith handler function named onPressLearnMore*/}
+        <Button onPress={onPressLearnMore2} title="WATER QUALITY" color="#100" />
+        </View>
+        <View style={styles.container1}>
+        {/* Button whith handler function named onPressLearnMore*/}
+        <Button onPress={onPressLearnMore3} title="WATER GOAL" color="#100" />
+        </View>
+        </View>
+      </SafeAreaView>
+  );
+}
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    //paddingTop: Constants.statusBarHeight,
+    backgroundColor: '#d4c1f0',
+    padding: 0,
+  },
+  paragraph: {
+    margin: 24,
+    fontSize: 24,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    fontFamily: 'Georgia',
+    color: '#2b007a'
+  },
+    container1: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#8c6bc3',
+    color: '#2b007a'
+  },
+    subtext: {
+    margin: 10,
+    fontSize: 15,
+    fontFamily: 'Georgia-Italic',
+    textAlign: 'left',
+    color: '#2b007a'
+  },
+});
