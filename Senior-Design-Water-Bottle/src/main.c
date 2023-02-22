@@ -10,7 +10,7 @@
 
 
 #include "stm32f0xx.h"
-//#include "string.h"
+#include "string.h"
 
 const char test[] = "This bottle test";
 int sample;
@@ -18,6 +18,8 @@ char msg;
 
 //void set_char_msg(int, char);
 void nano_wait(unsigned int);
+int temp_init(GPIO_TypeDef*, int);
+float get_temp(GPIO_TypeDef*, int);
 
 void nano_wait(unsigned int n) {
     asm(    "        mov r0,%0\n"
@@ -56,6 +58,7 @@ void init_spi1() {
     SPI1 -> CR1 |= SPI_CR1_SPE;
 }
 void spi_cmd(unsigned int data) {
+    //wait for the TXE bit to be set, then send data to the SPI DR register
     while(!(SPI1->SR & SPI_SR_TXE)) {}
     SPI1->DR = data;
 }
@@ -72,8 +75,7 @@ void spi1_init_oled() {
     spi_cmd(0x02);
     spi_cmd(0x0c);
 }
-
-// Top row
+//function writes string to top part of OLED display
 void spi1_display1(const char *string) {
     spi_cmd(0x02);
     while(*string != '\0') {
@@ -81,8 +83,7 @@ void spi1_display1(const char *string) {
         string++;
     }
 }
-
-// Bottom row
+//function writes string to bottom part of OLED display
 void spi1_display2(const char *string) {
     spi_cmd(0xc0);
     while(*string != '\0') {
@@ -90,6 +91,55 @@ void spi1_display2(const char *string) {
         string++;
     }
 }
+//following subroutines are work in progress for E-ink display
+void enable_ports(void) {
+    //PA5: SCK
+    //PA7: MOSI
+    //PA14: DC
+    //PA12: CS
+    //PA15: RST
+    RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
+    GPIOA->MODER &= ~(GPIO_MODER_MODER5 | GPIO_MODER_MODER7 | GPIO_MODER_MODER14 | GPIO_MODER_MODER12 | GPIO_MODER_MODER15);
+    GPIOA->AFR[0] &= ~(0xf0f00000);
+    GPIOA->MODER |= (GPIO_MODER_MODER5_1 | GPIO_MODER_MODER7_1 | GPIO_MODER_MODER14_0 | GPIO_MODER_MODER12_0 | GPIO_MODER_MODER15_0);
+
+    GPIOA->PUPDR &= ~(GPIO_PUPDR_PUPDR5 | GPIO_PUPDR_PUPDR7 | GPIO_PUPDR_PUPDR14 | GPIO_PUPDR_PUPDR12 | GPIO_PUPDR_PUPDR15);
+    GPIOA->PUPDR |= 0x4400;
+    GPIOA->OTYPER &= ~(GPIO_OTYPER_OT_5 | GPIO_OTYPER_OT_7 | GPIO_OTYPER_OT_14 | GPIO_OTYPER_OT_12 | GPIO_OTYPER_OT_15);
+    GPIOA->OSPEEDR |= (GPIO_OSPEEDR_OSPEEDR5 | GPIO_OSPEEDR_OSPEEDR7 | GPIO_OSPEEDR_OSPEEDR14);
+
+
+
+
+
+
+
+
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
+    GPIOB->MODER &= ~0x3000000;
+    GPIOB->PUPDR &= ~0x3000000;
+    GPIOB->PUPDR |= 0x1000000;
+
+}
+void init_spi1_2(void) {
+
+    RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
+    SPI1->CR1 &= ~(SPI_CR1_SPE);
+    RCC->APB2RSTR |= RCC_APB2RSTR_SPI1RST;
+    RCC->APB2RSTR &= ~RCC_APB2RSTR_SPI1RST;
+    SPI1->CR1 |= SPI_CR1_MSTR;
+    SPI1->CR1 |= SPI_CR1_SSM;
+    SPI1->CR1 |= SPI_CR1_SSI;
+    SPI1->CR1 |= SPI_CR1_SPE;
+
+}
+inline void e_ink_write(uint8_t data) {
+    while(!(SPI1->SR & SPI_SR_TXE)) {};
+    *(uint8_t*) & SPI1->DR = data;
+}
+
+
+//end e-ink subroutines
 /*uint16_t display[34] = {
         0x002, // Command to set the cursor at the first position line 1
         0x200+'E', 0x200+'C', 0x200+'E', 0x200+'3', 0x200+'6', + 0x200+'2', 0x200+' ', 0x200+'i',
@@ -100,6 +150,7 @@ void spi1_display2(const char *string) {
 };
 void spi1_setup_dma(void) {
     DMA1_Channel3 -> CCR &= ~DMA_CCR_EN; // Turn off the enable bit for the channel
+
     RCC -> AHBENR |= RCC_AHBENR_DMA1EN;
     DMA1_Channel3 -> CPAR = (uint32_t) &(SPI1 -> DR);
     DMA1_Channel3 -> CMAR = (uint32_t) display;
@@ -111,9 +162,11 @@ void spi1_setup_dma(void) {
     DMA1_Channel3 -> CCR |= DMA_CCR_CIRC;
 }*/
 void init_tim6(void) {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM6EN; //turn on clock for timer 6
+    //set up prescaler and ARR values so display switches every 5 seconds
     TIM6->PSC = 48000-1;
     TIM6->ARR = 5000-1;
+    //set up UIE and CEN bits and interrupt flag
     TIM6->DIER |= TIM_DIER_UIE;
 /*    TIM6->CR2 &= ~TIM_CR2_MMS;
     TIM6->CR2 |= TIM_CR2_MMS_1;*/
@@ -123,17 +176,26 @@ void init_tim6(void) {
 void TIM6_DAC_IRQHandler(void)
 {
     // TODO: Remember to acknowledge the interrupt right here.
-    TIM6->SR &= ~TIM_SR_UIF;
+    TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
+    //if sample value is 0, display temperature
     if(sample == 0) {
-        spi1_display1("Temperature:    ");
-        spi1_display2("20 degrees C ");
+        char temp_str[100];
+        float temp;
+        temp_init(GPIOC, 8);
+        temp = get_temp(GPIOC, 8);
+        sprintf(temp_str, "%2.2f", temp);
+        spi1_display1("Temperature:     ");
+        strcat(temp_str, " degrees C");
+        spi1_display2(temp_str);
         sample = 1;
     }
+    //if sample value is 1, display liquid level
     else if(sample == 1) {
         spi1_display1("Liquid Level: ");
         spi1_display2("50 mL           ");
         sample = 2;
     }
+    //if sample value is 2, display battery level
     else{
        spi1_display1("Battery Level: ");
        spi1_display2("50%             ");
@@ -151,47 +213,57 @@ void TIM6_DAC_IRQHandler(void)
 
 }
 void init_tim2(void) {
-    RCC->APB1ENR |= 0x0000001;
+    RCC->APB1ENR |= 0x0000001; // turn on clock for timer 2
+    //set prescaler and ARR value so timer triggers every 10 seconds
     TIM2->PSC = 4800-1;
     TIM2->ARR = 1000-1;
+    //finish setting up timer by setting DIER and CR1 bits as well as interrupt flag
     TIM2->DIER |= 1<<0;
     TIM2->CR1 |= 1<<0;
     NVIC->ISER[0] = 1<<15;
 }
 void init_tim3(void) {
-    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN;
+    RCC->APB1ENR |= RCC_APB1ENR_TIM3EN; //turn on clock for timer 3
+    //set prescaler and ARR value so timer triggers every 10 seconds
     TIM3->PSC = 4800 - 1;
     TIM3->ARR = 1000 - 1;
+    //finish setting up timer by setting DIER and CR1 bits as well as interrupt flag
     TIM3->DIER |= 1<<0;
     TIM3->CR1 |= 1<<0;
     NVIC->ISER[0] = 1<<16;
 }
-float volt1;
-char line1[21];
-float volt2;
-char line2[21];
-
+float volt1; //analog value coming from PA3
+char line1[21]; //string value of volt1
+float volt2; //analog value coming from PA2
+char line2[21]; //string value of volt2
+//ISR for Tim2
 void TIM2_IRQHandler(void) {
-    TIM2->SR &= ~1<<0;
+    TIM2->SR &= ~1<<0; //acknowledge interrupt
+    //deselect all channels and select channel 3
     ADC1->CHSELR = 0;
     ADC1->CHSELR |= 1 << 3;
-    ADC1->CR |= ADC_CR_ADSTART;
-    while(!(ADC1->ISR & ADC_ISR_EOC));
-    volt1 = (float)(ADC1->DR) * 3 / 4095.0;
+    ADC1->CR |= ADC_CR_ADSTART; //start the ADC
+    while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
+    volt1 = (float)(ADC1->DR) * 3 / 4095.0; //get value from DR register and convert to analog value
+    //display this value on OLED line 1
     sprintf(line1, "%2.2f", volt1);
     spi1_display1(line1);
 }
+//ISR for Tim3
 void TIM3_IRQHandler(void) {
-    TIM3->SR &= ~1<<0;
+    TIM3->SR &= ~1<<0; //acknowledge interrupt
+    //deselect all ADC channels and select channel 2
     ADC1->CHSELR = 0;
     ADC1->CHSELR |= 1 << 2;
-    ADC1->CR |= ADC_CR_ADSTART;
-    while(!(ADC1->ISR & ADC_ISR_EOC));
-    volt2 = (float)(ADC1->DR) * 3 / 4095.0;
+    ADC1->CR |= ADC_CR_ADSTART; //turn on ADC
+    while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
+    volt2 = (float)(ADC1->DR) * 3 / 4095.0; //convert value from DR register to analog value
+    //dispaly value on OLED line 2
     sprintf(line2, "%2.2f", volt2);
     spi1_display2(line2);
 
 }
+
 void init_adc(void) {
 /*    init_spi1();
     spi1_init_oled();
@@ -199,18 +271,20 @@ void init_adc(void) {
     char line2[21];
     float volt1;
     float volt2;*/
+    //set up PA2 & PA3 for analog input
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
     GPIOA->MODER &= ~0xf0;
     GPIOA->MODER |= 0xf0;
+    //set up clock for ADC1
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
-    RCC->CR2 |= RCC_CR2_HSI14ON;
-    while(!(RCC->CR2 & RCC_CR2_HSI14ON));
-    ADC1->CR |= ADC_CR_ADEN;
-    while(!(ADC1->ISR & ADC_ISR_ADRDY));
-    while((ADC1->CR & ADC_CR_ADSTART));
+    RCC->CR2 |= RCC_CR2_HSI14ON; // turns on high-speed 14MHz clock
+    while(!(RCC->CR2 & RCC_CR2_HSI14ON)); //waits for clock to be ready
+    ADC1->CR |= ADC_CR_ADEN; // enables ADC
+    while(!(ADC1->ISR & ADC_ISR_ADRDY)); //waits for ADC to be ready
+    while((ADC1->CR & ADC_CR_ADSTART)); // wait for the ADSTART bit to be 0
 /*    ADC1->CHSELR = 0;
     ADC1->CHSELR |= 1 << 3;*/
-    while(!(ADC1->ISR & ADC_ISR_ADRDY));
+    while(!(ADC1->ISR & ADC_ISR_ADRDY)); // wait for ADC to be ready
 /*    while (1) {
         ADC1->CHSELR = 0;
         ADC1->CHSELR |= 1<<3;
@@ -229,50 +303,81 @@ void init_adc(void) {
         sprintf(line2, "%2.2f", volt2);
         spi1_display2(line2);*/
 }
+//PC0
+//PC1
+//PC9
+//PC10
+void enable_gpio_ports(void) {
+    RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
+    GPIOC->MODER &= ~0x3c000f;
+    GPIOC->MODER |= 0x140000;
+    GPIOC->PUPDR &= ~(0xf);
+    GPIOC->PUPDR |= 0x8;
 
+}
+void init_exti(void) {
+    RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
+    SYSCFG->EXTICR[0] &= ~(SYSCFG_EXTICR1_EXTI0 | SYSCFG_EXTICR1_EXTI1);
+    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI0_PC | SYSCFG_EXTICR1_EXTI1_PC;
+    EXTI->RTSR |= EXTI_RTSR_TR0 | EXTI_RTSR_TR1;
+    EXTI->IMR |= EXTI_IMR_MR0 | EXTI_IMR_MR1;
+    NVIC->ISER[0] = 1 << 5;
+}
+void EXTI0_1_IRQHandler(void) {
+    if(GPIOC->IDR & 1 << 0) {
+        EXTI->PR |= EXTI_PR_PR0;
+        GPIOC->ODR ^= (1<<9);
+    }
+    if (GPIOC->IDR & 1 << 1) {
+        EXTI->PR |= EXTI_PR_PR1;
+        GPIOC->ODR ^= (1<<10);
+    }
+}
 void init_dac(void) {
+    //set up PA4 for analog output
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
     GPIOA->MODER &= ~0x300;
     GPIOA->MODER |= 0x300;
 
-    RCC->APB1ENR |= RCC_APB1ENR_DACEN;
-    DAC->CR &= ~DAC_CR_EN1;
-    DAC->CR &= ~DAC_CR_BOFF1;
-    DAC->CR |= DAC_CR_TEN1;
-    DAC->CR |= DAC_CR_TSEL1;
-    DAC->CR |= DAC_CR_EN1;
+    RCC->APB1ENR |= RCC_APB1ENR_DACEN; //enable clock to DAC
+    DAC->CR &= ~DAC_CR_EN1; //disable DAC channel 1
+    DAC->CR &= ~DAC_CR_BOFF1; //keep buffer off
+    DAC->CR |= DAC_CR_TEN1; //enable trigger
+    DAC->CR |= DAC_CR_TSEL1; //software trigger
+    DAC->CR |= DAC_CR_EN1; //enable DAC channel 1
 
-    int x = 2000;
-    while((DAC->SWTRIGR & DAC_SWTRIGR_SWTRIG1) == DAC_SWTRIGR_SWTRIG1);
-    DAC->DHR12R1 = x;
-    DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1;
+    int x = 2000; // set up value to go into DAC holding register (this value should yield about 1.425 V based on reference voltage of 3.0V and trial and error)
+    while((DAC->SWTRIGR & DAC_SWTRIGR_SWTRIG1) == DAC_SWTRIGR_SWTRIG1); //wait for DAC to clear the SWTRIG1 bit
+    DAC->DHR12R1 = x; //put this value into the holding register
+    DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1; //trigger the conversion
 }
-
+//setup code for UART (for Bluetooth)
 void init_usart5(void) {
-    RCC->AHBENR |= RCC_AHBENR_GPIOCEN | RCC_AHBENR_GPIODEN;
-    GPIOC->MODER &= ~0x3000000;
-    GPIOC->MODER |= 0x2000000;
-    GPIOC->AFR[1] |= 0x20000;
-    GPIOD->MODER &= ~0x30;
-    GPIOD->MODER |= 0x20;
-    GPIOD->AFR[0] |= 0x200;
+    //set up GPIO for alternate functions
+    //PB11 - Rx
+    //PB10 - Tx
+    //PB13 - CTS
+    //PB14 - RTS
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
+    GPIOB->MODER &= ~0x3cf00000;
+    GPIOB->MODER |= 0x28a00000;
+    GPIOB->AFR[1] |= 0x4404400;
 
-    RCC->APB1ENR |= RCC_APB1ENR_USART5EN;
-    USART5->CR1 |= ~USART_CR1_UE;
-    USART5->CR1 |= ~(1<<28);
-    USART5->CR1 &= ~USART_CR1_M;
-    USART5->CR2 &= ~(USART_CR2_STOP_0);
-    USART5->CR2 &= ~USART_CR2_STOP_1;
-    USART5->CR1 &= ~USART_CR1_PCE;
-    USART5->CR1 &= ~USART_CR1_OVER8;
-    USART5->BRR = 0x000000a1;
-    USART5->CR1 |= USART_CR1_TE | USART_CR1_RE;
-    USART5->CR1 |= USART_CR1_UE;
-    while(!(USART5->ISR & USART_ISR_TEACK) || !(USART5->ISR & USART_ISR_REACK)) {
 
-    }
+    //set up code for UART5
+    RCC->APB1ENR |= RCC_APB1ENR_USART3EN; //set up clock for UART
+    USART3->CR1 |= ~USART_CR1_UE; //turn of UE bit
+    USART3->CR1 |= ~(1<<28);
+    USART3->CR1 &= ~USART_CR1_M; //8 data bits/
+    USART3->CR2 &= ~(USART_CR2_STOP_0);
+    USART3->CR2 &= ~USART_CR2_STOP_1; //1 stop bit
+    USART3->CR1 &= ~USART_CR1_PCE; //no parity
+    USART3->CR1 &= ~USART_CR1_OVER8; //oversampling by 16
+    USART3->BRR = 0x2580; //set baud rate
+    USART3->CR1 |= USART_CR1_TE | USART_CR1_RE; //turn on TE and RE bits
+    USART3->CR1 |= USART_CR1_UE; //turn on UE bit
+    while(!(USART3->ISR & USART_ISR_TEACK) || !(USART3->ISR & USART_ISR_REACK)) {} //wait for transmit and receive buffers are empty
 }
-
 // time in us
 void time_w0(float time, GPIO_TypeDef* GPIO, int pin_num)
 {
@@ -373,43 +478,52 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
     int tmp_bits = read_byte_tmp(GPIO, pin_num);
     tmp_bits |= read_byte_tmp(GPIO, pin_num) << 8;
 
-    //char debug_out[21];
-    //sprintf(debug_out, "0x%08X", tmp_bits);
-    //spi1_display1(debug_out);
+ /*   char debug_out[21];
+    sprintf(debug_out, "0x%08X", tmp_bits);
+    spi1_display1(debug_out);*/
 
     final_temp = ((float)(tmp_bits >> 3)) * 0.5;
-    //char debug_out2[21];
-    //sprintf(debug_out2, "%2.2f", final_temp);
-    //spi1_display2(debug_out2);
+/*    char debug_out2[21];
+    sprintf(debug_out2, "%2.2f", final_temp);
+    spi1_display2(debug_out2);*/
 
     return final_temp;
 }
-
-#define REGULAR_TEST
-#if defined(REGULAR_TEST)
+#define DISPLAY_TEST
+#if defined(DISPLAY_TEST)
 int main(void)
 {
-    //sample = 0;
-    //init_tim6();
+    sample = 0;
+    init_tim6();
     init_spi1();
     spi1_init_oled();
-    //spi1_display1("Good Day! ");
-//    init_tim2();
-//    init_tim3();
-//    init_adc();
+    spi1_display1("Good Day! ");
+    //init_tim2();
+    //init_tim3();
+    //init_adc();
     //init_dac();
-/*    init_spi1();
-    spi1_init_oled();
-    spi1_display1("Hello there,");
-    spi1_display2(test);*/
-    temp_init(GPIOC, 8);
-    get_temp(GPIOC, 8);
 }
 #endif
-
+//#define TEST_DAC
+#if defined(TEST_DAC)
+int main(void) {
+    init_dac();
+}
+#endif
+//#define TEST_ADC
+#if defined(TEST_ADC)
+int main(void) {
+    init_spi1();
+    spi1_init_oled();
+    init_tim2();
+    init_tim3();
+    init_adc();
+}
+#endif
 //#define TEST_UART
 #if defined(TEST_UART)
 #include <stdio.h>
+/*
 int __io_putchar(int c) {
     if(c == '\n') {
         while(!(USART5->ISR & USART_ISR_TXE)) { }
@@ -429,11 +543,24 @@ int __io_getchar(void) {
      }
      __io_putchar(c);
      return c;
-}
-
+}*/
+char wake_string[] = "wake wake wake up!!!!";
+char receieved_string[10];
+int length = strlen(wake_string);
 int main() {
     init_usart5();
-    setbuf(stdin,0);
+    for(int i = 0; i < length; i++) {
+        while(!(USART3->ISR & USART_ISR_TXE)) {}
+        USART3->TDR = wake_string[i];
+    }
+    nano_wait(10000);
+    /*for(int j = 0; j < 10; j++) {
+        while(!(USART3->ISR & USART_ISR_RXE)) {}
+
+    }
+    */
+
+/*    setbuf(stdin,0);
     setbuf(stdout,0);
     setbuf(stderr,0);
     printf("Enter your name: ");
@@ -444,6 +571,28 @@ int main() {
     for(;;) {
         char c = getchar();
         putchar(c);
-    }
+    }*/
+}
+#endif
+//#define TEST_TOGGLE
+#if defined(TEST_TOGGLE)
+int main(void) {
+    enable_gpio_ports();
+    init_exti();
+
+}
+#endif
+//#define TEST_TEMP
+#if defined(TEST_TEMP)
+int main(void) {
+    //char temp[100];
+    //float temp_val;
+    init_spi1();
+    spi1_init_oled();
+    temp_init(GPIOC, 8);
+    get_temp(GPIOC, 8);
+    //sprintf(temp, "%2.1f", temp_val);
+    //spi1_display1(temp);
+
 }
 #endif
