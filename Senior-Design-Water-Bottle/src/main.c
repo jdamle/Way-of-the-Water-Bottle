@@ -18,7 +18,7 @@ char msg;
 
 //void set_char_msg(int, char);
 void nano_wait(unsigned int);
-int temp_init(GPIO_TypeDef*, int);
+int temp_init(GPIO_TypeDef*, int[]);
 float get_temp(GPIO_TypeDef*, int);
 
 void nano_wait(unsigned int n) {
@@ -404,6 +404,7 @@ void write_byte(int code, GPIO_TypeDef* GPIO, int pin_num)
     }
 }
 
+// Temperature Code
 int read_bit_tmp(GPIO_TypeDef* GPIO, int pin_num)
 {
     time_w0(1, GPIO, pin_num);
@@ -441,25 +442,55 @@ int temp_talk_start(GPIO_TypeDef* GPIO, int pin_num)
     return 0;
 }
 
+// pin_nums[0] = temp sense data pin
+// pin_nums[1] = temp heat output
+// pin_nums[2] = temp cool output
+// pin_nums[3] = temp ctrl enable
+// Heat => heat_or_cool: 0
+// Cool => heat_or_cool: 1
+void set_heat_cool(GPIO_TypeDef* GPIO, int pin_nums[4], int heat_or_cool)
+{
+    GPIO -> BRR  |= (0x1 << pin_nums[1]) |
+                    (0x1 << pin_nums[2]) |
+                    (0x1 << pin_nums[3]); // Make sure to turn off temperature before switching heating or cooling
+    GPIO -> BSRR |= (0x1 << pin_nums[1 + heat_or_cool]);
+}
+
 // Need to make all temp transactions atomic
-int temp_init(GPIO_TypeDef* GPIO, int pin_num)
+// pin_nums[0] = temp sense data pin
+// pin_nums[1] = temp heat output
+// pin_nums[2] = temp cool output
+// pin_nums[3] = temp ctrl enable
+int temp_init(GPIO_TypeDef* GPIO, int pin_nums[4])
 {
     int success = 0;
 
     // Set up GPIO
-    RCC -> AHBENR   |= RCC_AHBENR_GPIOCEN;
-    GPIOC -> MODER  &= ~0x30000;
-    GPIOC -> MODER  |=  0x10000; // Output mode 01 for pin PC8
-    GPIOC -> PUPDR  &=  0x0;
-    GPIOC -> OTYPER |=  0x1 << 8;   // Set pin PC8 open drain
+    int let = 0;
+    if (GPIO == GPIOB)
+    {
+        let++;
+    }
+    else if (GPIO == GPIOC)
+    {
+        let+=2;
+    }
+    RCC -> AHBENR |= RCC_AHBENR_GPIOAEN << let;
+    for (int i = 0; i < 4; i++)
+    {
+        GPIO -> MODER  &= ~(0x3 << pin_nums[i]*2);
+        GPIO -> MODER  |=  (0x1 << pin_nums[i]*2); // Output mode 01 (push_pull) for all pins
+        GPIO -> PUPDR  &= ~(0x3 << pin_nums[i]*2); // No push pull resistors for pins
+    }
+    GPIO -> OTYPER |=  0x1 << pin_nums[0];   // Set temp sense pin open drain
 
-    success |= temp_talk_start(GPIO, pin_num);
+    success |= temp_talk_start(GPIO, pin_nums[0]);
 
     // Function commands
-    write_byte(0x4E, GPIO, pin_num); // write to scratch pad
-    write_byte(0xB0, GPIO, pin_num); // write TH (high temp alarm) 0xB0
-    write_byte(0x64, GPIO, pin_num); // write TL (low temp alarm) 0x64
-    write_byte(0x1F, GPIO, pin_num); // cfg to 9 bit resolution (least accurate but fastest)
+    write_byte(0x4E, GPIO, pin_nums[0]); // write to scratch pad
+    write_byte(0xB0, GPIO, pin_nums[0]); // write TH (high temp alarm) 0xB0
+    write_byte(0x64, GPIO, pin_nums[0]); // write TL (low temp alarm) 0x64
+    write_byte(0x1F, GPIO, pin_nums[0]); // cfg to 9 bit resolution (least accurate but fastest)
     // 0 [00] 11111 => 00 cfg bits the rest are reserved
 
     return success;
@@ -489,7 +520,7 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
 
     return final_temp;
 }
-#define DISPLAY_TEST
+//#define DISPLAY_TEST
 #if defined(DISPLAY_TEST)
 int main(void)
 {
@@ -582,17 +613,18 @@ int main(void) {
 
 }
 #endif
-//#define TEST_TEMP
+#define TEST_TEMP
 #if defined(TEST_TEMP)
 int main(void) {
-    //char temp[100];
-    //float temp_val;
+    char temp[16];
+    float temp_val;
     init_spi1();
     spi1_init_oled();
-    temp_init(GPIOC, 8);
-    get_temp(GPIOC, 8);
-    //sprintf(temp, "%2.1f", temp_val);
-    //spi1_display1(temp);
 
+    int temp_pins[4] = {8, 0, 1, 2};
+    temp_init(GPIOC, temp_pins);
+    temp_val = get_temp(GPIOC, temp_pins[0]);
+    sprintf(temp, "%2.1f", temp_val);
+    spi1_display1(temp);
 }
 #endif
