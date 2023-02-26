@@ -15,7 +15,7 @@ startup/%.o: ../startup/%.s
 	@echo 'Building file: $<'
 	@echo 'Invoking: MCU GCC Assembler'
 	@echo $(PWD)
-	arm-none-eabi-as -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle/StdPeriph_Driver/inc" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle/inc" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle/CMSIS/device" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle/CMSIS/core" -g -o "$@" "$<"
+	arm-none-eabi-as -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle/StdPeriph_Driver/inc" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle/inc" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle/CMSIS/device" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle/CMSIS/core" -g -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

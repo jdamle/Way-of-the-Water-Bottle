@@ -11,15 +11,20 @@
 
 #include "stm32f0xx.h"
 #include "string.h"
+#define _USE_MATH_DEFINES
+#include "math.h"
 
 const char test[] = "This bottle test";
-int sample;
+int sample = 0;
 char msg;
 
 //void set_char_msg(int, char);
 void nano_wait(unsigned int);
 int temp_init(GPIO_TypeDef*, int[]);
 float get_temp(GPIO_TypeDef*, int);
+float get_turbidity(void);
+float get_liquid_vol(float);
+void display(int);
 
 void nano_wait(unsigned int n) {
     asm(    "        mov r0,%0\n"
@@ -173,33 +178,54 @@ void init_tim6(void) {
     TIM6->CR1 |= TIM_CR1_CEN;
     NVIC->ISER[0] = 1<<17;
 }
+float volt1 = 0.0;
+float volt2 = 0.0;
 void TIM6_DAC_IRQHandler(void)
 {
     // TODO: Remember to acknowledge the interrupt right here.
     TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
     //if sample value is 0, display temperature
-    if(sample == 0) {
+    if(sample == 1) {
         char temp_str[100];
         float temp;
-        temp_init(GPIOC, 8);
+        int temp_pins[4] = {8, 0, 1, 2};
+        temp_init(GPIOC, temp_pins);
         temp = get_temp(GPIOC, 8);
         sprintf(temp_str, "%2.2f", temp);
         spi1_display1("Temperature:     ");
         strcat(temp_str, " degrees C");
         spi1_display2(temp_str);
-        sample = 1;
+        //sample = 1;
     }
     //if sample value is 1, display liquid level
-    else if(sample == 1) {
+    else if(sample == 2) {
+        char vol_str[100];
+        float volume;
+        volume = get_liquid_vol(0.03);
+        sprintf(vol_str, "%2.2f", volume);
         spi1_display1("Liquid Level: ");
-        spi1_display2("50 mL           ");
-        sample = 2;
+        strcat(vol_str, " mL        ");
+        spi1_display2(vol_str);
+        //sample = 2;
     }
-    //if sample value is 2, display battery level
-    else{
+    //if sample value is 2, display turbidity
+    else if(sample == 3) {
+        char turbid_str[100];
+        float turbidity;
+        turbidity = get_turbidity();
+        sprintf(turbid_str, "%2.2f", turbidity);
+        spi1_display1("Turbidity:         ");
+        strcat(turbid_str, " NTU     ");
+        spi1_display2(turbid_str);
+        //sample = 3;
+        //sample = 2;
+    }
+    //if sample value is 3, display battery level
+    else if(sample == 4){
        spi1_display1("Battery Level: ");
        spi1_display2("50%             ");
-        sample = 0;
+
+        //sample = 0;
     }
 /*    init_spi1();
     spi1_init_oled();*/
@@ -215,8 +241,8 @@ void TIM6_DAC_IRQHandler(void)
 void init_tim2(void) {
     RCC->APB1ENR |= 0x0000001; // turn on clock for timer 2
     //set prescaler and ARR value so timer triggers every 10 seconds
-    TIM2->PSC = 4800-1;
-    TIM2->ARR = 1000-1;
+    TIM2->PSC = 48-1;
+    TIM2->ARR = 5000-1;
     //finish setting up timer by setting DIER and CR1 bits as well as interrupt flag
     TIM2->DIER |= 1<<0;
     TIM2->CR1 |= 1<<0;
@@ -225,18 +251,22 @@ void init_tim2(void) {
 void init_tim3(void) {
     RCC->APB1ENR |= RCC_APB1ENR_TIM3EN; //turn on clock for timer 3
     //set prescaler and ARR value so timer triggers every 10 seconds
-    TIM3->PSC = 4800 - 1;
-    TIM3->ARR = 1000 - 1;
+    TIM3->PSC = 48 - 1;
+    TIM3->ARR = 5000 - 1;
     //finish setting up timer by setting DIER and CR1 bits as well as interrupt flag
     TIM3->DIER |= 1<<0;
     TIM3->CR1 |= 1<<0;
     NVIC->ISER[0] = 1<<16;
 }
-float volt1; //analog value coming from PA3
+ //analog value coming from PA3
 char line1[21]; //string value of volt1
-float volt2; //analog value coming from PA2
+ //analog value coming from PA2
 char line2[21]; //string value of volt2
 //ISR for Tim2
+#define HISTSIZE 128
+int hist1[HISTSIZE] = { 0 };
+int sum1 = 0;
+int pos1 = 0;
 void TIM2_IRQHandler(void) {
     TIM2->SR &= ~1<<0; //acknowledge interrupt
     //deselect all channels and select channel 3
@@ -244,12 +274,21 @@ void TIM2_IRQHandler(void) {
     ADC1->CHSELR |= 1 << 3;
     ADC1->CR |= ADC_CR_ADSTART; //start the ADC
     while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
-    volt1 = (float)(ADC1->DR) * 3 / 4095.0; //get value from DR register and convert to analog value
+    int reading2 = ADC1->DR;
+    sum1 -= hist1[pos1];
+    sum1 += hist1[pos1] = reading2;
+    pos1 = (pos1 + 1) & (HISTSIZE - 1);
+    float val2 = (sum1 >> 7);
+    volt1 = val2 * 3 / 4095.0; //get value from DR register and convert to analog value
     //display this value on OLED line 1
-    sprintf(line1, "%2.2f", volt1);
-    spi1_display1(line1);
+    //sprintf(line1, "%2.2f", volt1);
+    //spi1_display1(line1);
 }
 //ISR for Tim3
+#define HISTSIZE2 128
+int hist2[HISTSIZE2] = { 0 };
+int sum2 = 0;
+int pos2 = 0;
 void TIM3_IRQHandler(void) {
     TIM3->SR &= ~1<<0; //acknowledge interrupt
     //deselect all ADC channels and select channel 2
@@ -257,13 +296,38 @@ void TIM3_IRQHandler(void) {
     ADC1->CHSELR |= 1 << 2;
     ADC1->CR |= ADC_CR_ADSTART; //turn on ADC
     while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
-    volt2 = (float)(ADC1->DR) * 3 / 4095.0; //convert value from DR register to analog value
+    //int hist2[HISTSIZE] = { 0 };
+    //int sum2 = 0;
+    //int pos2 = 0;
+    int reading = ADC1->DR;
+    sum2 -= hist2[pos2];
+    sum2 += hist2[pos2] = reading;
+    pos2 = (pos2 + 1) & (HISTSIZE2-1);
+    float val = (sum2 >> 7);
+    volt2 = val * 3 / 4095.0; //convert value from DR register to analog value
     //dispaly value on OLED line 2
-    sprintf(line2, "%2.2f", volt2);
-    spi1_display2(line2);
+    //sprintf(line2, "%2.2f", volt2);
+    //spi1_display2(line2);
 
 }
+float get_liquid_vol(float radius) {
+    float rsense = (2.4 * volt1)/(3.3-volt1);
+    float level_inch = (rsense - 2.2)/(-0.175);
+    if(level_inch < 0.0) {
+        level_inch = 0.0;
+    }
+    float level_meter = (level_inch) * 0.0254;
+    float vol = 3.14159265 * (radius * radius) * level_meter;
+    return vol * 1000000;
 
+}
+float get_turbidity(void){
+    float turbid = (volt2*6.76 - 4.2)/(-0.0015);
+    if (turbid < 0.0) {
+        turbid = 0.0;
+    }
+    return turbid;
+}
 void init_adc(void) {
 /*    init_spi1();
     spi1_init_oled();
@@ -309,21 +373,26 @@ void init_adc(void) {
 //PC10
 void enable_gpio_ports(void) {
     RCC->AHBENR |= RCC_AHBENR_GPIOCEN;
-    GPIOC->MODER &= ~0x3c000f;
+    GPIOC->MODER &= ~0x3c033f;
     GPIOC->MODER |= 0x140000;
-    GPIOC->PUPDR &= ~(0xf);
-    GPIOC->PUPDR |= 0x8;
+    GPIOC->PUPDR &= ~(0x33f);
+    GPIOC->PUPDR |= 0x22a;
 
 }
 void init_exti(void) {
     RCC->APB2ENR |= RCC_APB2ENR_SYSCFGCOMPEN;
-    SYSCFG->EXTICR[0] &= ~(SYSCFG_EXTICR1_EXTI0 | SYSCFG_EXTICR1_EXTI1);
-    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI0_PC | SYSCFG_EXTICR1_EXTI1_PC;
-    EXTI->RTSR |= EXTI_RTSR_TR0 | EXTI_RTSR_TR1;
-    EXTI->IMR |= EXTI_IMR_MR0 | EXTI_IMR_MR1;
-    NVIC->ISER[0] = 1 << 5;
+/*    SYSCFG->EXTICR[0] &= ~(SYSCFG_EXTICR1_EXTI0 | SYSCFG_EXTICR1_EXTI1 | SYSCFG_EXTICR1_EXTI2);
+    SYSCFG->EXTICR[0] |= SYSCFG_EXTICR1_EXTI0_PC | SYSCFG_EXTICR1_EXTI1_PC | SYSCFG_EXTICR1_EXTI2_PC;
+    EXTI->RTSR |= EXTI_RTSR_TR0 | EXTI_RTSR_TR1 | EXTI_RTSR_TR2;
+    EXTI->IMR |= EXTI_IMR_MR0 | EXTI_IMR_MR1 | EXTI_IMR_MR2;*/
+    //SYSCFG->EXTICR[0] &= ~(SYSCFG_EXTICR1_EXTI2);
+    SYSCFG->EXTICR[1] |= SYSCFG_EXTICR2_EXTI4_PC;
+    EXTI->RTSR |= EXTI_RTSR_TR4;
+    EXTI->IMR &= ~0xffffffff;
+    EXTI->IMR |= EXTI_IMR_MR4;
+    NVIC->ISER[0] = 1 << 7;
 }
-void EXTI0_1_IRQHandler(void) {
+/*void EXTI0_1_IRQHandler(void) {
     if(GPIOC->IDR & 1 << 0) {
         EXTI->PR |= EXTI_PR_PR0;
         GPIOC->ODR ^= (1<<9);
@@ -332,6 +401,75 @@ void EXTI0_1_IRQHandler(void) {
         EXTI->PR |= EXTI_PR_PR1;
         GPIOC->ODR ^= (1<<10);
     }
+}*/
+void EXTI4_15_IRQHandler(void) {
+
+    EXTI->PR |= EXTI_PR_PR4;
+
+   if (sample == 4) {
+        sample = 0;
+    }
+    sample++;
+    //display(sample);
+
+/*    if(GPIOC->IDR & 1 << 0) {
+        EXTI->PR |= EXTI_PR_PR0;
+        GPIOC->ODR ^= (1<<9);
+    }
+    if (GPIOC->IDR & 1 << 1) {
+        EXTI->PR |= EXTI_PR_PR1;
+        GPIOC->ODR ^= (1<<10);
+    }*/
+}
+
+
+void display(int sample) {
+    if(sample == 1) {
+                char temp_str[100];
+                float temp;
+                int temp_pins[4] = {8, 0, 1, 2};
+                temp_init(GPIOC, temp_pins);
+                temp = get_temp(GPIOC, 8);
+                sprintf(temp_str, "%2.2f", temp);
+                spi1_display1("Temperature:     ");
+                strcat(temp_str, " degrees C");
+                spi1_display2(temp_str);
+                //sample = 1;
+            }
+            //if sample value is 1, display liquid level
+            else if(sample == 2) {
+                char vol_str[100];
+                float volume;
+                volume = get_liquid_vol(0.03);
+                sprintf(vol_str, "%2.2f", volume);
+                spi1_display1("Liquid Level: ");
+                strcat(vol_str, " mL        ");
+                spi1_display2(vol_str);
+                //sample = 2;
+            }
+            //if sample value is 2, display turbidity
+            else if(sample == 3) {
+
+                char turbid_str[100];
+                float turbidity;
+                turbidity = get_turbidity();
+                sprintf(turbid_str, "%2.2f", turbidity);
+                spi1_display1("Turbidity:         ");
+                strcat(turbid_str, " NTU     ");
+                spi1_display2(turbid_str);
+                //sample = 3;
+                //sample = 2;
+
+            }
+            //if sample value is 3, display battery level
+            else{
+               spi1_display1("Battery Level: ");
+               spi1_display2("50%             ");
+               //sample = 0;
+            }
+
+
+
 }
 void init_dac(void) {
     //set up PA4 for analog output
@@ -476,12 +614,12 @@ int temp_init(GPIO_TypeDef* GPIO, int pin_nums[4])
         let+=2;
     }
     RCC -> AHBENR |= RCC_AHBENR_GPIOAEN << let;
-    for (int i = 0; i < 4; i++)
+/*    for (int i = 0; i < 4; i++)
     {
         GPIO -> MODER  &= ~(0x3 << pin_nums[i]*2);
         GPIO -> MODER  |=  (0x1 << pin_nums[i]*2); // Output mode 01 (push_pull) for all pins
         GPIO -> PUPDR  &= ~(0x3 << pin_nums[i]*2); // No push pull resistors for pins
-    }
+    }*/
     GPIO -> OTYPER |=  0x1 << pin_nums[0];   // Set temp sense pin open drain
 
     success |= temp_talk_start(GPIO, pin_nums[0]);
@@ -520,14 +658,22 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
 
     return final_temp;
 }
-//#define DISPLAY_TEST
+#define DISPLAY_TEST
 #if defined(DISPLAY_TEST)
 int main(void)
 {
-    sample = 0;
+    //sample = 0;
     init_tim6();
+    init_exti();
+    init_tim3();
+    init_tim2();
+    init_adc();
     init_spi1();
     spi1_init_oled();
+    enable_gpio_ports();
+    //int temp_pins[4] = {8, 0, 1, 2};
+    //temp_init(GPIOC, temp_pins);
+    //init_exti();
     spi1_display1("Good Day! ");
     //init_tim2();
     //init_tim3();
@@ -613,7 +759,7 @@ int main(void) {
 
 }
 #endif
-#define TEST_TEMP
+//#define TEST_TEMP
 #if defined(TEST_TEMP)
 int main(void) {
     char temp[16];
