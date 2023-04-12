@@ -92,25 +92,29 @@ void init_spi2() {
     //PB14 - MISO
     //PB15 - MOSI
     RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
-    GPIOB->MODER &= ~(GPIO_MODER_MODER12 | GPIO_MODER_MODER13 | GPIO_MODER_MODER14 | GPIO_MODER_MODER15);
+    GPIOB->MODER &= ~(GPIO_MODER_MODER12 | GPIO_MODER_MODER13 | GPIO_MODER_MODER14 | GPIO_MODER_MODER15 | GPIO_MODER_MODER1);
     GPIOB->MODER |= (GPIO_MODER_MODER12_1 | GPIO_MODER_MODER13_1 | GPIO_MODER_MODER14_1 | GPIO_MODER_MODER15_1);
+    GPIOB->MODER |= (0x4);
+    GPIOB->PUPDR |= 0x4;
 
     RCC->APB1ENR |= RCC_APB1ENR_SPI2EN;
     SPI2->CR1 &= ~(SPI_CR1_SPE);
     SPI2->CR2 |= SPI_CR1_BR;
     SPI2->CR2 |= SPI_CR1_MSTR;
 
-    // DS = 0111 8 bits
-    SPI2->CR2 |= SPI_CR2_DS_0 | SPI_CR2_DS_1 | SPI_CR2_DS_2;
-    SPI2->CR2 &= ~(SPI_CR2_DS_3);
+    // DS = 1001 10 bits
+    SPI2->CR2 |= SPI_CR2_DS_0 |SPI_CR2_DS_3;
+    SPI2->CR2 &= ~(SPI_CR2_DS_1 | SPI_CR2_DS_2);
     SPI2->CR2 |= SPI_CR2_SSOE | SPI_CR2_NSSP;
 
     SPI2->CR1 |= SPI_CR1_SPE;
 
 }
 void spi2_cmd(unsigned int data) {
+    GPIOB->BSRR |= 1<<1;
     while(!(SPI2->SR & SPI_SR_TXE)) {}
     SPI2->DR = data;
+    GPIOB->BSRR |= 1<<17;
 }
 int get_gyro_val(void) {
     int gyro_1;
@@ -125,6 +129,7 @@ int get_gyro_val(void) {
 }
 void spi_cmd(unsigned int data) {
     //wait for the TXE bit to be set, then send data to the SPI DR register
+
     while(!(SPI1->SR & SPI_SR_TXE)) {}
     SPI1->DR = data;
 }
@@ -166,11 +171,12 @@ void spi1_init_eink(void) {
 //function writes string to top part of OLED display
 void spi2_display1(const char *string) {
     spi2_cmd(0x02);
-    GPIOA->BSRR |= 1<<1;
+    //GPIOA->BSRR |= 1<<1;
     while(*string != '\0') {
         spi_data(*string);
         string++;
     }
+
 }
 //function writes string to bottom part of OLED display
 void spi2_display2(const char *string) {
@@ -904,7 +910,7 @@ int main(void)
     //init_tim14();
     init_adc();
     //init_tim6();
-    init_spi1();
+    init_spi2();
     spi2_init_oled();
     //enable_gpio_ports();
     //int temp_pins[4] = {8, 0, 1, 2};
@@ -926,14 +932,14 @@ int main(void) {
 //#define TEST_ADC
 #if defined(TEST_ADC)
 int main(void) {
-    init_spi1();
+    init_spi2();
     spi2_init_oled();
     init_tim2();
     init_tim3();
     init_adc();
 }
 #endif
-#define TEST_UART
+//#define TEST_UART
 #if defined(TEST_UART)
 #include <stdio.h>
 /*
@@ -1063,6 +1069,16 @@ int main(void) {
     HAL_Init();
     init_spi1();
     spi1_init_eink();
+    spi2_display1("HI");
+
+}
+#endif
+#define PCB_TEST
+#if defined(PCB_TEST)
+int main(void) {
+    HAL_Init();
+    init_spi2();
+    spi2_init_oled();
     spi2_display1("HI");
 
 }
