@@ -16,7 +16,7 @@
 UART_HandleTypeDef huart3;
 
 
-const char test[] = "This bottle test";
+
 int sample = 0;
 char msg;
 
@@ -26,6 +26,7 @@ int temp_init(GPIO_TypeDef*, int[]);
 float get_temp(GPIO_TypeDef*, int);
 float get_turbidity(void);
 float get_liquid_vol(float);
+float get_battery_percentage(void);
 void display(int);
 
 void nano_wait(unsigned int n) {
@@ -37,20 +38,40 @@ void init_spi1() {
     // PA5  SPI1_SCK
     // PA6  SPI1_MISO
     // PA7  SPI1_MOSI
-    // PA15 SPI1_NSS
+    // PA4 SPI1_NSS
+    // PA1 DC
+    // PA8 SRCS
+    // PA9 RST
+    // PA10 BUSY
+    // PA11 ENA
 
     RCC -> AHBENR |= RCC_AHBENR_GPIOAEN;
 
-    GPIOA -> MODER &= ~(GPIO_MODER_MODER5 |
+    GPIOA -> MODER &= ~(GPIO_MODER_MODER4 |
+                        GPIO_MODER_MODER5 |
                         GPIO_MODER_MODER6 |
-                        GPIO_MODER_MODER7 |
-                        GPIO_MODER_MODER15);
+
+
+                        GPIO_MODER_MODER7);
 
     // Alternate Function 10
-    GPIOA -> MODER |= (GPIO_MODER_MODER5_1 |
+    GPIOA -> MODER |= (GPIO_MODER_MODER4_1 |
+                       GPIO_MODER_MODER5_1 |
                        GPIO_MODER_MODER6_1 |
-                       GPIO_MODER_MODER7_1 |
-                       GPIO_MODER_MODER15_1);
+                       GPIO_MODER_MODER7_1);
+
+    // PA GPIO Output
+/*
+    GPIOA->MODER |= 0x550004;
+
+    GPIOA->BSRR |= 1<<8 | 1<<9 | 1<<10 | 1<<11;
+
+    //PA PUPDR
+    GPIOA->PUPDR &= ~0xff0003;
+    GPIOA->PUPDR |= 0x550004;
+*/
+
+
 
     RCC -> APB2ENR |= RCC_APB2ENR_SPI1EN;
     SPI1 -> CR1 &= ~(SPI_CR1_SPE);
@@ -60,9 +81,47 @@ void init_spi1() {
     // DS = 1001 10 bits
     SPI1 -> CR2 |= SPI_CR2_DS_0 | SPI_CR2_DS_3;
     SPI1 -> CR2 &= ~(SPI_CR2_DS_1 | SPI_CR2_DS_2);
-    SPI1 -> CR2 |= SPI_CR2_SSOE | SPI_CR2_NSSP; // have to write this register all at once to avoid possible issue with data size
+    SPI1 -> CR2 |= SPI_CR2_SSOE| SPI_CR2_NSSP; // have to write this register all at once to avoid possible issue with data size
 
     SPI1 -> CR1 |= SPI_CR1_SPE;
+}
+//SPI for Gyroscope
+void init_spi2() {
+    //P12 - NSS
+    //PB13 - SCK
+    //PB14 - MISO
+    //PB15 - MOSI
+    RCC->AHBENR |= RCC_AHBENR_GPIOBEN;
+    GPIOB->MODER &= ~(GPIO_MODER_MODER12 | GPIO_MODER_MODER13 | GPIO_MODER_MODER14 | GPIO_MODER_MODER15);
+    GPIOB->MODER |= (GPIO_MODER_MODER12_1 | GPIO_MODER_MODER13_1 | GPIO_MODER_MODER14_1 | GPIO_MODER_MODER15_1);
+
+    RCC->APB1ENR |= RCC_APB1ENR_SPI2EN;
+    SPI2->CR1 &= ~(SPI_CR1_SPE);
+    SPI2->CR2 |= SPI_CR1_BR;
+    SPI2->CR2 |= SPI_CR1_MSTR;
+
+    // DS = 0111 8 bits
+    SPI2->CR2 |= SPI_CR2_DS_0 | SPI_CR2_DS_1 | SPI_CR2_DS_2;
+    SPI2->CR2 &= ~(SPI_CR2_DS_3);
+    SPI2->CR2 |= SPI_CR2_SSOE | SPI_CR2_NSSP;
+
+    SPI2->CR1 |= SPI_CR1_SPE;
+
+}
+void spi2_cmd(unsigned int data) {
+    while(!(SPI2->SR & SPI_SR_TXE)) {}
+    SPI2->DR = data;
+}
+int get_gyro_val(void) {
+    int gyro_1;
+    int gyro_2;
+    spi_cmd(0xa2);
+    while (!((SPI1->SR) &(1<<0))) {}
+    gyro_1 = SPI1->DR;
+    spi_cmd(0xa3);
+    while (!((SPI1->SR) & (1<<0))) {}
+    gyro_2 = SPI1->DR;
+    return gyro_1;
 }
 void spi_cmd(unsigned int data) {
     //wait for the TXE bit to be set, then send data to the SPI DR register
@@ -70,36 +129,59 @@ void spi_cmd(unsigned int data) {
     SPI1->DR = data;
 }
 void spi_data(unsigned int data) {
-    spi_cmd(data | 0x200);
+    spi2_cmd(data | 0x200);
 }
-void spi1_init_oled() {
+void spi2_init_oled() {
     nano_wait(1000000);
-    spi_cmd(0x38);
-    spi_cmd(0x08);
-    spi_cmd(0x01);
+    spi2_cmd(0x38);
+    spi2_cmd(0x08);
+    spi2_cmd(0x01);
     nano_wait(2000000);
-    spi_cmd(0x06);
+    spi2_cmd(0x06);
+    spi2_cmd(0x02);
+    spi2_cmd(0x0c);
+}
+void spi1_init_eink(void) {
+    //nano_wait(1000000);
+    GPIOA->BSRR |= 1<<17;
+    SPI1->CR2 &= ~SPI_CR2_NSSP;
+    spi_cmd(0x04);
+    spi_cmd(0x00);
+    spi_cmd(0xFF);
     spi_cmd(0x02);
-    spi_cmd(0x0c);
+    spi_cmd(0x00);
+    //nano_wait(2000000);
+    spi_cmd(0x01);
+    spi_cmd(0x1F);
+    spi_cmd(0x50);
+    spi_cmd(0x01);
+    spi_cmd(0x97);
+    spi_cmd(0xFE);
+    SPI1->CR2 |= SPI_CR2_NSSP;
+    //GPIOA->BSRR |= 1<<1;
+
+
+
 }
 //function writes string to top part of OLED display
-void spi1_display1(const char *string) {
-    spi_cmd(0x02);
+void spi2_display1(const char *string) {
+    spi2_cmd(0x02);
+    GPIOA->BSRR |= 1<<1;
     while(*string != '\0') {
         spi_data(*string);
         string++;
     }
 }
 //function writes string to bottom part of OLED display
-void spi1_display2(const char *string) {
-    spi_cmd(0xc0);
+void spi2_display2(const char *string) {
+    spi2_cmd(0xc0);
     while(*string != '\0') {
         spi_data(*string);
         string++;
     }
 }
 //following subroutines are work in progress for E-ink display
-void enable_ports(void) {
+/*void enable_ports(void) {
     //PA5: SCK
     //PA7: MOSI
     //PA14: DC
@@ -127,7 +209,7 @@ void enable_ports(void) {
     GPIOB->PUPDR &= ~0x3000000;
     GPIOB->PUPDR |= 0x1000000;
 
-}
+}*/
 void init_spi1_2(void) {
 
     RCC->APB2ENR |= RCC_APB2ENR_SPI1EN;
@@ -182,6 +264,7 @@ void init_tim6(void) {
 }
 float volt1 = 0.0;
 float volt2 = 0.0;
+float volt3 = 0.0;
 void TIM6_DAC_IRQHandler(void)
 {
     // TODO: Remember to acknowledge the interrupt right here.
@@ -194,9 +277,9 @@ void TIM6_DAC_IRQHandler(void)
         temp_init(GPIOC, temp_pins);
         temp = get_temp(GPIOC, 5);
         sprintf(temp_str, "%2.2f", temp);
-        spi1_display1("Temperature:     ");
+        spi2_display1("Temperature:     ");
         strcat(temp_str, " degrees C");
-        spi1_display2(temp_str);
+        spi2_display2(temp_str);
         //sample = 2;
     }
     //if sample value is 1, display liquid level
@@ -205,9 +288,9 @@ void TIM6_DAC_IRQHandler(void)
         float volume;
         volume = get_liquid_vol(0.03);
         sprintf(vol_str, "%2.2f", volt1);
-        spi1_display1("Liquid Level: ");
+        spi2_display1("Liquid Level:    ");
         strcat(vol_str, " V        ");
-        spi1_display2(vol_str);
+        spi2_display2(vol_str);
         //sample = 3;
     }
     //if sample value is 2, display turbidity
@@ -216,23 +299,28 @@ void TIM6_DAC_IRQHandler(void)
         float turbidity;
         turbidity = get_turbidity();
         sprintf(turbid_str, "%2.2f", volt2);
-        spi1_display1("Turbidity:         ");
+        spi2_display1("Turbidity:         ");
         strcat(turbid_str, " V     ");
-        spi1_display2(turbid_str);
+        spi2_display2(turbid_str);
         //sample = 4;
         //sample = 2;
     }
     //if sample value is 3, display battery level
     else if(sample == 4){
-       spi1_display1("Battery Level: ");
-       spi1_display2("50%             ");
+        char batt_str[100];
+        float batt_percentage;
+        batt_percentage = get_battery_percentage();
+        sprintf(batt_str, "%2.2f", batt_percentage);
+        spi2_display1("Battery Level:      ");
+        strcat(batt_str, "%    ");
+        spi2_display2(batt_str);
 
         //sample = 1;
     }
 /*    init_spi1();
-    spi1_init_oled();*/
-    //spi1_display1(msg);
-    //spi1_display2(test);
+    spi2_init_oled();*/
+    //spi2_display1(msg);
+    //spi2_display2(test);
 
 
 
@@ -260,10 +348,22 @@ void init_tim3(void) {
     TIM3->CR1 |= 1<<0;
     NVIC->ISER[0] = 1<<16;
 }
+void init_tim14(void) {
+    RCC->APB1ENR |= RCC_APB1ENR_TIM14EN; //turn on clock for timer 14
+    //set prescaler and ARR value
+    TIM14->PSC = 48-1;
+    TIM14->ARR = 5000-1;
+    //finish setting up timer by setting DIER and CR1 bits as well as interrupt flag
+    TIM14->DIER |= 1<<0;
+    TIM14->CR1 |= 1<<0;
+    NVIC->ISER[0] = 1<<19;
+}
  //analog value coming from PA3
 char line1[21]; //string value of volt1
  //analog value coming from PA2
 char line2[21]; //string value of volt2
+//analog value coming from battery
+char line3[21]; //string value of volt3
 //ISR for Tim2
 #define HISTSIZE 128
 int hist1[HISTSIZE] = { 0 };
@@ -273,7 +373,7 @@ void TIM2_IRQHandler(void) {
     TIM2->SR &= ~1<<0; //acknowledge interrupt
     //deselect all channels and select channel 3
     ADC1->CHSELR = 0;
-    ADC1->CHSELR |= 1 << 3;
+    ADC1->CHSELR |= 1 << 2;
     ADC1->CR |= ADC_CR_ADSTART; //start the ADC
     while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
     int reading2 = ADC1->DR;
@@ -284,8 +384,9 @@ void TIM2_IRQHandler(void) {
     volt1 = val2 * 2 / 4095.0; //get value from DR register and convert to analog value
     //display this value on OLED line 1
     //sprintf(line1, "%2.2f", volt1);
-    //spi1_display1(line1);
+    //spi2_display1(line1);
 }
+
 //ISR for Tim3
 #define HISTSIZE2 128
 int hist2[HISTSIZE2] = { 0 };
@@ -295,7 +396,7 @@ void TIM3_IRQHandler(void) {
     TIM3->SR &= ~1<<0; //acknowledge interrupt
     //deselect all ADC channels and select channel 2
     ADC1->CHSELR = 0;
-    ADC1->CHSELR |= 1 << 2;
+    ADC1->CHSELR |= 1 << 1;
     ADC1->CR |= ADC_CR_ADSTART; //turn on ADC
     while(!(ADC1->ISR & ADC_ISR_EOC)); //wait for end of conversion
     //int hist2[HISTSIZE] = { 0 };
@@ -309,8 +410,26 @@ void TIM3_IRQHandler(void) {
     volt2 = val * 3 / 4095.0; //convert value from DR register to analog value
     //dispaly value on OLED line 2
     //sprintf(line2, "%2.2f", volt2);
-    //spi1_display2(line2);
+    //spi2_display2(line2);
 
+}
+//ISR for Tim14
+#define HISTSIZE3 128
+int hist3[HISTSIZE3] = { 0 };
+int sum3 = 0;
+int pos3 = 0;
+void TIM14_IRQHandler(void) {
+    TIM14->SR &= ~1<<0;
+    ADC1->CHSELR = 0;
+    ADC1->CHSELR |= 1<<0;
+    ADC1->CR |= ADC_CR_ADSTART;
+    while(!(ADC1->ISR & ADC_ISR_EOC));
+    int reading = ADC1->DR;
+    sum3 -=hist3[pos3];
+    sum3 += hist3[pos3] = reading;
+    pos3 = (pos3 + 1) & (HISTSIZE3 - 1);
+    float val = (sum3 >> 7);
+    volt3 = val * 3 / 4095.0;
 }
 #define Rref 2.4
 #define Supply 2.2
@@ -333,17 +452,28 @@ float get_turbidity(void){
     }
     return turbid;
 }
+#define Battery_Up 2.1
+#define Battery_Down 1.5
+float get_battery_percentage(void) {
+    float batt_per = 0.0;
+    batt_per = (volt3-Battery_Down)/(Battery_Up-Battery_Down) * 100;
+    if(batt_per < 0.0) {
+        batt_per = 0.0;
+    }
+    return batt_per;
+
+}
 void init_adc(void) {
 /*    init_spi1();
-    spi1_init_oled();
+    spi2_init_oled();
     char line1[21];
     char line2[21];
     float volt1;
     float volt2;*/
     //set up PA2 & PA3 for analog input
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
-    GPIOA->MODER &= ~0xf0;
-    GPIOA->MODER |= 0xf0;
+    GPIOA->MODER &= ~0x3f;
+    GPIOA->MODER |= 0x3f;
     //set up clock for ADC1
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON; // turns on high-speed 14MHz clock
@@ -362,7 +492,7 @@ void init_adc(void) {
         while(!(ADC1->ISR & ADC_ISR_EOC));
         volt1 = (float)(ADC1->DR) * 3 / 4095.0;
         sprintf(line1, "%2.2f", volt1);
-        spi1_display1(line1);
+        spi2_display1(line1);
         ADC1->CHSELR = 0;
         ADC1->CHSELR |= 1 << 2;
         while(!(ADC1->ISR & ADC_ISR_ADRDY));
@@ -370,7 +500,7 @@ void init_adc(void) {
         while(!(ADC1->ISR & ADC_ISR_EOC));
         volt2 = (float)(ADC1->DR) * 3 / 4095.0;
         sprintf(line2, "%2.2f", volt2);
-        spi1_display2(line2);*/
+        spi2_display2(line2);*/
 }
 //PC0
 //PC1
@@ -436,9 +566,9 @@ void display(int sample) {
                 temp_init(GPIOC, temp_pins);
                 temp = get_temp(GPIOC, 8);
                 sprintf(temp_str, "%2.2f", temp);
-                spi1_display1("Temperature:     ");
+                spi2_display1("Temperature:     ");
                 strcat(temp_str, " degrees C");
-                spi1_display2(temp_str);
+                spi2_display2(temp_str);
                 //sample = 1;
             }
             //if sample value is 1, display liquid level
@@ -447,9 +577,9 @@ void display(int sample) {
                 float volume;
                 volume = get_liquid_vol(0.03);
                 sprintf(vol_str, "%2.2f", volume);
-                spi1_display1("Liquid Level: ");
+                spi2_display1("Liquid Level: ");
                 strcat(vol_str, " mL        ");
-                spi1_display2(vol_str);
+                spi2_display2(vol_str);
                 //sample = 2;
             }
             //if sample value is 2, display turbidity
@@ -459,17 +589,17 @@ void display(int sample) {
                 float turbidity;
                 turbidity = get_turbidity();
                 sprintf(turbid_str, "%2.2f", turbidity);
-                spi1_display1("Turbidity:         ");
+                spi2_display1("Turbidity:         ");
                 strcat(turbid_str, " NTU     ");
-                spi1_display2(turbid_str);
+                spi2_display2(turbid_str);
                 //sample = 3;
                 //sample = 2;
 
             }
             //if sample value is 3, display battery level
             else if(sample == 4){
-               spi1_display1("Battery Level: ");
-               spi1_display2("50%             ");
+               spi2_display1("Battery Level: ");
+               spi2_display2("50%             ");
                //sample = 0;
             }
 
@@ -495,7 +625,7 @@ void init_dac(void) {
     DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1; //trigger the conversion
 }
 //setup code for UART (for Bluetooth)
-uint8_t RX_BUFFER[10];
+uint8_t RX_BUFFER[20];
 uint8_t TX_BUFFER1[10];
 uint8_t TX_BUFFER2[10];
 void init_usart3(void) {
@@ -547,12 +677,28 @@ void Error_Handler(void) {
     error = 1;
 }
 int on = 0;
+uint8_t TX_BUFFER5[8] = {'A','T', '+', 'A','D','D','R', '?' };
+//goes to this function once transmission is complete
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
-    HAL_UART_Transmit_IT(&huart3, TX_BUFFER2, sizeof(TX_BUFFER2));
+    //HAL_UART_Transmit_IT(&huart3, TX_BUFFER5, sizeof(TX_BUFFER5));
+    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
     on = 1;
 }
+//goes to this function once reception is complete
+uint8_t TX_BUFFER3[6] = {'L', 'E', 'D', ' ', 'O', 'N'};
+uint8_t TX_BUFFER4[7] = {'L', 'E', 'D', ' ', 'O', 'F', 'F'};
+//uint8_t TX_BUFFER5[10] = {'A','T'};
+int ron = 0;
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-
+    ron = 1;
+    if(RX_BUFFER[0] == 'O') {
+        GPIOC->BSRR |= 0x400;
+        HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
+    }
+    else {
+        GPIOC->BSRR |= 0x4000000;
+        HAL_UART_Transmit_IT(&huart3, TX_BUFFER4, sizeof(TX_BUFFER4));
+    }
     HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
 }
 
@@ -689,14 +835,61 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
 
  /*   char debug_out[21];
     sprintf(debug_out, "0x%08X", tmp_bits);
-    spi1_display1(debug_out);*/
+    spi2_display1(debug_out);*/
 
     final_temp = ((float)(tmp_bits >> 3)) * 0.5;
 /*    char debug_out2[21];
     sprintf(debug_out2, "%2.2f", final_temp);
-    spi1_display2(debug_out2);*/
+    spi2_display2(debug_out2);*/
 
     return final_temp;
+}
+void heat_cool(GPIO_TypeDef* GPIO, int pin_nums[4])
+{
+    float new_tmp = (float)RX_BUFFER[0];
+    int temp_set = 0;
+    int temp_pins[4] = {8, 0, 1, 2};
+    temp_init(GPIOC, temp_pins);
+    float temp_val = get_temp(GPIOC, temp_pins[0]);
+    //if we need to heat
+    if(new_tmp > (temp_val-3)) {
+        set_heat_cool(GPIO, pin_nums, 0); //turn on heat pin
+        //keep in loop until close to desired temperature
+        while(temp_set == 0) {
+            temp_init(GPIOC, temp_pins);
+            temp_val = get_temp(GPIOC, temp_pins[0]); //keep polling temperature sensor
+            if(new_tmp > (temp_set -3)) {
+                continue;
+            }
+            else {
+                temp_set = 1; //set to 1 if close to desired temperature
+            }
+        }
+
+    }
+    //if we need to cool
+    else if (new_tmp < (temp_val+3)) {
+        set_heat_cool(GPIO, pin_nums, 1); //turn on cool pin
+        //keep in loop until close to desired temperature
+        while(temp_set == 0) {
+            temp_init(GPIOC, temp_pins);
+            temp_val = get_temp(GPIOC, temp_pins[0]); //keep polling temperature sensor
+            if(new_tmp < (temp_val + 3)) {
+                continue;
+            }
+            else {
+                temp_set = 1; //set to 1 if close to desired temperature
+            }
+        }
+    }
+    //turn off all temperature pins
+    GPIO -> BRR  |= (0x1 << pin_nums[1]) |
+                    (0x1 << pin_nums[2]) |
+                    (0x1 << pin_nums[3]);
+
+
+
+
 }
 //#define DISPLAY_TEST
 #if defined(DISPLAY_TEST)
@@ -708,15 +901,16 @@ int main(void)
     init_tim6();
     init_tim3();
     init_tim2();
+    //init_tim14();
     init_adc();
     //init_tim6();
     init_spi1();
-    spi1_init_oled();
+    spi2_init_oled();
     //enable_gpio_ports();
     //int temp_pins[4] = {8, 0, 1, 2};
     //temp_init(GPIOC, temp_pins);
     //init_exti();
-    spi1_display1("Good Day! ");
+    spi2_display1("Good Day! ");
     //init_tim2();
     //init_tim3();
     //init_adc();
@@ -733,7 +927,7 @@ int main(void) {
 #if defined(TEST_ADC)
 int main(void) {
     init_spi1();
-    spi1_init_oled();
+    spi2_init_oled();
     init_tim2();
     init_tim3();
     init_adc();
@@ -771,18 +965,35 @@ int main() {
     char received_string[10];
     int length = strlen(wake_string);*/
     HAL_Init();
+    enable_gpio_ports();
+    init_exti();
+    init_adc();
+    init_tim6();
+    init_tim3();
+    init_tim2();
+    init_tim14();
+    //init_adc();
+    init_spi1();
+    spi2_init_oled();
+    spi2_display1("Good Day! ");
     init_usart3();
-    for(int i = 0; i < 10; i++) {
+    //enable_gpio_ports();
+/*    for(int i = 0; i < 10; i++) {
         TX_BUFFER1[i] = i;
     }
     for(int i = 0; i < 10; i++) {
         TX_BUFFER2[i] = i;
-    }
-    HAL_UART_Transmit_IT(&huart3, TX_BUFFER1, sizeof(TX_BUFFER1));
-    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    }*/
+    //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    HAL_UART_Transmit_IT(&huart3, TX_BUFFER5, sizeof(TX_BUFFER5));
+    //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
 
     while(1) {
         HAL_Delay(250);
+        ron = 2;
+        if(RX_BUFFER[0] == 'O') {
+            GPIOC->BSRR |= 1<<10;
+        }
     }
 
  /*   while(1) {
@@ -791,13 +1002,13 @@ int main() {
 
     //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
     //init_spi1();
-    //spi1_init_oled();
-    //spi1_display1("Hi there");
+    //spi2_init_oled();
+    //spi2_display1("Hi there");
 
 /*    for(int i = 0; i < length; i++) {
         while(!(USART3->ISR & USART_ISR_TXE)) {}
         USART3->TDR = wake_string[i];
-        spi1_display1(USART3->TDR);
+        spi2_display1(USART3->TDR);
         //nano_wait(10000);
         received_string[i] = USART3->RDR;
 
@@ -837,12 +1048,22 @@ int main(void) {
     char temp[16];
     float temp_val;
     init_spi1();
-    spi1_init_oled();
+    spi2_init_oled();
 
     int temp_pins[4] = {8, 0, 1, 2};
     temp_init(GPIOC, temp_pins);
     temp_val = get_temp(GPIOC, temp_pins[0]);
     sprintf(temp, "%2.1f", temp_val);
-    spi1_display1(temp);
+    spi2_display1(temp);
+}
+#endif
+//#define TEST_EINK
+#if defined(TEST_EINK)
+int main(void) {
+    HAL_Init();
+    init_spi1();
+    spi1_init_eink();
+    spi2_display1("HI");
+
 }
 #endif
