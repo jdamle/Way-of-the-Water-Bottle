@@ -391,7 +391,7 @@ void TIM2_IRQHandler(void) {
     sum1 += hist1[pos1] = reading2;
     pos1 = (pos1 + 1) & (HISTSIZE - 1);
     float val2 = (sum1 >> 7);
-    volt1 = val2 * 2 / 4095.0; //get value from DR register and convert to analog value
+    volt1 = val2 * 3.3 / 4095.0; //get value from DR register and convert to analog value
     //display this value on OLED line 1
     //sprintf(line1, "%2.2f", volt1);
     //spi2_display1(line1);
@@ -417,7 +417,7 @@ void TIM3_IRQHandler(void) {
     sum2 += hist2[pos2] = reading;
     pos2 = (pos2 + 1) & (HISTSIZE2-1);
     float val = (sum2 >> 7);
-    volt2 = val * 3 / 4095.0; //convert value from DR register to analog value
+    volt2 = val * 3.3 / 4095.0; //convert value from DR register to analog value
     //dispaly value on OLED line 2
     //sprintf(line2, "%2.2f", volt2);
     //spi2_display2(line2);
@@ -439,7 +439,7 @@ void TIM14_IRQHandler(void) {
     sum3 += hist3[pos3] = reading;
     pos3 = (pos3 + 1) & (HISTSIZE3 - 1);
     float val = (sum3 >> 7);
-    volt3 = val * 3 / 4095.0;
+    volt3 = val * 3.3 / 4095.0;
 }
 #define Rref 2.4
 #define Supply 2.2
@@ -452,7 +452,8 @@ float get_liquid_vol(float radius) {
     }
     float level_meter = (level_inch) * 0.0254;
     float vol = 3.14159265 * (radius * radius) * level_meter;
-    return vol * 1000000;
+    //return vol * 1000000;
+    return level_inch;
 
 }
 float get_turbidity(void){
@@ -480,14 +481,20 @@ void init_adc(void) {
     char line2[21];
     float volt1;
     float volt2;*/
+
+
     //set up PA2 & PA3 for analog input
     RCC->AHBENR |= RCC_AHBENR_GPIOAEN;
     GPIOA->MODER &= ~0x3f;
     GPIOA->MODER |= 0x3f;
+
+
     //set up clock for ADC1
     RCC->APB2ENR |= RCC_APB2ENR_ADC1EN;
     RCC->CR2 |= RCC_CR2_HSI14ON; // turns on high-speed 14MHz clock
     while(!(RCC->CR2 & RCC_CR2_HSI14ON)); //waits for clock to be ready
+    ADC1 -> SMPR |= 0x7; //Bits 111 sets Sampling time 239.5 ADC clock cycles (ADC clk => 14MHz)
+
     ADC1->CR |= ADC_CR_ADEN; // enables ADC
     while(!(ADC1->ISR & ADC_ISR_ADRDY)); //waits for ADC to be ready
     while((ADC1->CR & ADC_CR_ADSTART)); // wait for the ADSTART bit to be 0
@@ -986,17 +993,21 @@ int main() {
     //init_exti();
     sample = 0;
     init_adc();
-    //init_tim6();
+
+    // ADC Timers
     init_tim3();
     init_tim2();
     init_tim14();
-    //init_adc();
+
     init_spi2();
     spi2_init_oled();
+
     int temp_pins[4] = {3, 9, 10, 8};
     temp_init(GPIOA, temp_pins);
     GPIOA -> BRR |= (0x1 << 10);
+
     spi2_display1("Good Day! ");
+
     init_tim6();
     //init_usart3();
     //enable_gpio_ports();

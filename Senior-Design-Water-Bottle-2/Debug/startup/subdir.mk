@@ -15,7 +15,7 @@ startup/%.o: ../startup/%.s
 	@echo 'Building file: $<'
 	@echo 'Invoking: MCU GCC Assembler'
 	@echo $(PWD)
-	arm-none-eabi-as -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/HAL_Driver/Inc/Legacy" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/inc" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/CMSIS/device" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/CMSIS/core" -I"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/HAL_Driver/Inc" -g -o "$@" "$<"
+	arm-none-eabi-as -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/HAL_Driver/Inc/Legacy" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/inc" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/CMSIS/device" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/CMSIS/core" -I"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/HAL_Driver/Inc" -g -o "$@" "$<"
 	@echo 'Finished building: $<'
 	@echo ' '
 

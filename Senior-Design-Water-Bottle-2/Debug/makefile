@@ -31,10 +31,10 @@ endif
 all: Senior-Design-Water-Bottle-2.elf
 
 # Tool invocations
-Senior-Design-Water-Bottle-2.elf: $(OBJS) $(USER_OBJS) C:\Users\jaide\workspace\Senior-Design-Water-Bottle-2/LinkerScript.ld
+Senior-Design-Water-Bottle-2.elf: $(OBJS) $(USER_OBJS) C:\Users\ethan\linux-home\ewich\Way-of-the-Water-Bottle\Senior-Design-Water-Bottle-2/LinkerScript.ld
 	@echo 'Building target: $@'
 	@echo 'Invoking: MCU GCC Linker'
-	arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -T"C:/Users/jaide/workspace/Senior-Design-Water-Bottle-2/LinkerScript.ld" -Wl,-Map=output.map -Wl,--gc-sections -o "Senior-Design-Water-Bottle-2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -lm
+	arm-none-eabi-gcc -mcpu=cortex-m0 -mthumb -mfloat-abi=soft -T"C:/Users/ethan/linux-home/ewich/Way-of-the-Water-Bottle/Senior-Design-Water-Bottle-2/LinkerScript.ld" -Wl,-Map=output.map -Wl,--gc-sections -o "Senior-Design-Water-Bottle-2.elf" @"objects.list" $(USER_OBJS) $(LIBS) -lm
 	@echo 'Finished building target: $@'
 	@echo ' '
 	$(MAKE) --no-print-directory post-build
