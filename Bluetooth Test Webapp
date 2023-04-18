@@ -1,0 +1,27 @@
+/* App.tsx */
+
+import * as React from "react";
+import { useSmartLight} from "./hooks/useSmart";
+
+export const App = () => {
+  const { connect, toggle, isConnected } = useSmartLight();
+  return (
+    <div
+      style={{
+        height: "100vh",
+        display: "flex",
+        justifyContent: "center",
+        alignItems: "center",
+      }}
+    >        <button onClick={toggle}>Success, Toggle?</button>
+      {isConnected ? (
+        //<Text SUCCESS </Text>
+        <button onClick={toggle}>Success, Toggle?</button>
+      ) : (
+        <button onClick={connect}>Connect</button>
+      )}
+    </div>
+  );
+};
+
+export default App;
