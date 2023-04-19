@@ -1,0 +1,79 @@
+/* hooks/useSmartLight.ts */
+
+
+import * as React from "react";
+
+//import {setDevice} from "Bluetooth"
+
+export interface SmartLight {
+  connect: () => void;
+  isConnected: boolean;
+  toggle: () => void;
+}
+
+export const useSmartLight = (): SmartLight => {
+  console.log("enter")
+  const [isConnected, setIsConnected] = React.useState(false);
+  const [toggleCharacteristic, setToggleCharacteristic] =
+    React.useState<BluetoothRemoteGATTCharacteristic | null>(null);
+
+  const connect = async () => {
+    
+    const device = await navigator.bluetooth.requestDevice({
+      filters: [
+        {
+          namePrefix: "DSD TECH",
+        },
+      ],
+      //acceptAllDevices: true,
+      // Philips Hue Light Control Service
+      //optionalServices: ["932c32bd-0000-47a2-835a-a8d455b859dd"],
+    });
+    setIsConnected(true);
+    const device_name = device.gatt?.device.name;
+    const server = await device.gatt?.connect();
+    //const service = await server.getPrimaryService(
+   //   "0xFFE0"
+   // );
+    if (device.gatt !== undefined) {
+      console.log("connected");
+      const device_name = device.gatt.device.name;
+      const server = await device.gatt.connect();
+      const service = await server.getPrimaryService(
+        "0xFFE0"
+      );
+  
+      const toggleChar = await service.getCharacteristic(
+        "0xFFE1" // Notify/Write
+      );
+     //device.addEventListener('gattserverdisconnected', onDisconnected)
+      
+      setToggleCharacteristic(toggleChar);
+      setIsConnected(true);
+      //isConnected(true);
+    }
+    else {
+      console.log("not Connected");
+    }
+    
+    
+    //setServers(server)
+    // Philips Hue Light Control Service
+
+  };
+  /*const onDisconnected = () => {
+    alert("Disconnected")
+    const device = ""
+} */
+  const toggle = async () => {
+    //const currentValue = await toggleCharacteristic?.readValue();
+    //const lightIsCurrentlyOn = currentValue?.getUint8(0) ? true : false;
+
+    await toggleCharacteristic?.writeValue(
+      new Uint8Array([0x4a])
+      //new char(['J']);
+    );
+  };
+
+  return { connect, toggle, isConnected };
+};
