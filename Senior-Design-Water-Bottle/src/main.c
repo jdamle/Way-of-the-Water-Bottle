@@ -31,7 +31,36 @@ void nano_wait(unsigned int n) {
     asm(    "        mov r0,%0\n"
             "repeat: sub r0,#83\n"
             "        bgt repeat\n" : : "r"(n) : "r0", "cc");
+    //micro_wait(n/1000);
 }
+
+// Waits a microsecond using timer15
+// WARNING won't work if timer 15 is not initialized
+void micro_wait(unsigned int n)
+{
+    // Writes the value that triggers the capture compare
+    // Timer will count in CNT until it matches CCR1
+    TIM15 -> ARR = n - 1;
+    TIM15 -> CR1 |= TIM_CR1_CEN; // Starts the counting
+    while(!(TIM15 -> SR & TIM_SR_UIF)); // Checking for when capture/compare 1 interrupt flag goes high
+    TIM15 -> SR &= ~(TIM_SR_UIF);
+}
+
+// Set up the
+void init_tim15()
+{
+    RCC -> APB2ENR |= RCC_APB2ENR_TIM15EN;
+
+    // Sets clk frequency to CK_INT(48Mhz) / 48 => 1Mhz so 1 us period
+    TIM15 -> PSC = 48 - 1;
+    TIM15 -> ARR = ~0x0;
+
+    // Sets one-pulse mode to turn off the counter after the update event
+    TIM15 -> CR1 |= TIM_CR1_OPM;
+
+    TIM15 -> DIER |= TIM_DIER_UIE;
+}
+
 void init_spi1() {
     // PA5  SPI1_SCK
     // PA6  SPI1_MISO
@@ -741,6 +770,7 @@ int main(void)
     //init_tim3();
     //init_tim2();
     //init_adc();
+    //init_tim15();
     init_spi2();
     spi2_init_oled();
     //enable_gpio_ports();
@@ -748,6 +778,13 @@ int main(void)
     temp_init(GPIOA, temp_pins);
     GPIOA -> BRR |= (0x1 << 11); // Make sure wireless charging is enabled
     GPIOA -> BRR |= (0x1 << 12);
+    char temp_str[100];
+    float temp;
+    temp = get_temp(GPIOA, 3);
+    sprintf(temp_str, "%2.2f", temp);
+    spi2_display1("Temperature:     ");
+    strcat(temp_str, " degrees C");
+    spi2_display2(temp_str);
     //init_exti();
     spi2_display1("Me alive");
     //init_tim2();
@@ -757,6 +794,26 @@ int main(void)
     //init_tim6();
 }
 #endif
+
+//#define TEST_TIME
+#ifdef TEST_TIME
+int main(void)
+{
+    init_tim15();
+
+    RCC -> AHBENR |= RCC_AHBENR_GPIOAEN;
+        GPIOA -> MODER  &= ~(0x3 << 2*2);
+        GPIOA -> MODER  |=  (0x1 << 2*2); // Output mode 01 (push_pull) for all pins
+        GPIOA -> PUPDR  &= ~(0x3 << 2*2); // No push pull resistors for pins
+
+    GPIOA -> BRR |= 0x1 << 2;
+    nano_wait(200 * 1000);
+    GPIOA -> BSRR |= 0x1 << 2;
+    nano_wait(100 * 1000);
+    GPIOA -> BRR |= 0x1 << 2;
+}
+#endif
+
 //#define TEST_DAC
 #if defined(TEST_DAC)
 int main(void) {
