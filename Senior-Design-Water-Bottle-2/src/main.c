@@ -312,16 +312,19 @@ float volt1 = 0.0;
 float volt2 = 0.0;
 float volt3 = 0.0;
 uint8_t TRANSMIT_DATA[16];
+float bottle_temp;
 void TIM6_DAC_IRQHandler(void)
 {
     char string_display[20];
     // TODO: Remember to acknowledge the interrupt right here.
     TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
     //if sample value is 0, display temperature
-    float temp = 50.65;
-    //temp = get_temp(GPIOA, 3);
+    bottle_temp = 50.65;
+    //bottle_temp = get_temp(GPIOA, 3);
+    int temp_pins[4] = {3, 9, 10, 8};
+    heat_cool(GPIOA, temp_pins);
     uint8_t *temp_array;
-    temp_array = (uint8_t*)(&temp);
+    temp_array = (uint8_t*)(&bottle_temp);
     float volume = 32.7;
     //volume = get_liquid_vol(0.03);
     uint8_t *vol_array;
@@ -813,10 +816,12 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         break;
         case 'T': //character to update temperature
             //code to update temperature
+            //decode bytes to float
             user_tmp = 0.0;
         break;
         case 'N': //character to toggle temperature
            //code to toggle temperature
+            //is yes or no
             toggle_tmp = 0;
         break;
         case 'R':
@@ -980,46 +985,32 @@ float get_temp(GPIO_TypeDef* GPIO, int pin_num)
 }
 void heat_cool(GPIO_TypeDef* GPIO, int pin_nums[4])
 {
-    float new_tmp = (float)RX_BUFFER[0];
-    int temp_set = 0;
-    int temp_pins[4] = {8, 0, 1, 2};
-    temp_init(GPIOC, temp_pins);
-    float temp_val = get_temp(GPIOC, temp_pins[0]);
-    //if we need to heat
-    if(new_tmp > (temp_val-3)) {
-        set_heat_cool(GPIO, pin_nums, 0); //turn on heat pin
-        //keep in loop until close to desired temperature
-        while(temp_set == 0) {
-            temp_init(GPIOC, temp_pins);
-            temp_val = get_temp(GPIOC, temp_pins[0]); //keep polling temperature sensor
-            if(new_tmp > (temp_set -3)) {
-                continue;
-            }
-            else {
-                temp_set = 1; //set to 1 if close to desired temperature
-            }
+    if(toggle_tmp == 0) {
+        GPIO -> BRR  |= (0x1 << pin_nums[1]) |
+                        (0x1 << pin_nums[2]) |
+                        (0x1 << pin_nums[3]);
+    }
+    else {
+
+        //if we need to heat
+        if(user_tmp > (bottle_temp-3) && (user_tmp > 24.5)) {
+            set_heat_cool(GPIO, pin_nums, 0); //turn on heat pin
+
+        }
+        //if we need to cool
+        else if (user_tmp < (bottle_temp+3) && (user_tmp < 24.5)) {
+            set_heat_cool(GPIO, pin_nums, 1); //turn on cool pin
+        }
+        else {
+            //turn off all temperature pins
+            GPIO -> BRR  |= (0x1 << pin_nums[1]) |
+                            (0x1 << pin_nums[2]) |
+                            (0x1 << pin_nums[3]);
         }
 
     }
-    //if we need to cool
-    else if (new_tmp < (temp_val+3)) {
-        set_heat_cool(GPIO, pin_nums, 1); //turn on cool pin
-        //keep in loop until close to desired temperature
-        while(temp_set == 0) {
-            temp_init(GPIOC, temp_pins);
-            temp_val = get_temp(GPIOC, temp_pins[0]); //keep polling temperature sensor
-            if(new_tmp < (temp_val + 3)) {
-                continue;
-            }
-            else {
-                temp_set = 1; //set to 1 if close to desired temperature
-            }
-        }
-    }
-    //turn off all temperature pins
-    GPIO -> BRR  |= (0x1 << pin_nums[1]) |
-                    (0x1 << pin_nums[2]) |
-                    (0x1 << pin_nums[3]);
+
+
 
 
 
