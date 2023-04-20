@@ -67,7 +67,7 @@ void init_tim15()
 
     TIM15 -> DIER |= TIM_DIER_UIE;
 }
-
+//SPI for Gyroscope
 void init_spi1() {
     // PA5  SPI1_SCK
     // PA6  SPI1_MISO
@@ -113,13 +113,13 @@ void init_spi1() {
     SPI1 -> CR1 |= SPI_CR1_MSTR; // 1 means cfg master
 
     // DS = 1001 10 bits
-    SPI1 -> CR2 |= SPI_CR2_DS_0 | SPI_CR2_DS_3;
-    SPI1 -> CR2 &= ~(SPI_CR2_DS_1 | SPI_CR2_DS_2);
+    SPI1 -> CR2 |= SPI_CR2_DS_0 | SPI_CR2_DS_1 | SPI_CR2_DS_2;
+    SPI1 -> CR2 &= ~(SPI_CR2_DS_3);
     SPI1 -> CR2 |= SPI_CR2_SSOE| SPI_CR2_NSSP; // have to write this register all at once to avoid possible issue with data size
 
     SPI1 -> CR1 |= SPI_CR1_SPE;
 }
-//SPI for Gyroscope
+//SPI for Display
 void init_spi2() {
     //P12 - NSS
     //PB13 - SCK
@@ -154,6 +154,12 @@ void spi2_cmd(unsigned int data) {
     nano_wait(60000);
     GPIOB->BSRR |= 1<<1;
 }
+void spi_cmd(unsigned int data) {
+    //wait for the TXE bit to be set, then send data to the SPI DR register
+
+    while(!(SPI1->SR & SPI_SR_TXE)) {}
+    SPI1->DR = data;
+}
 int get_gyro_val(void) {
     int gyro_1;
     int gyro_2;
@@ -163,14 +169,10 @@ int get_gyro_val(void) {
     spi_cmd(0xa3);
     while (!((SPI1->SR) & (1<<0))) {}
     gyro_2 = SPI1->DR;
-    return gyro_1;
+    int gyro = (gyro_2<<4) | gyro_1;
+    return gyro;
 }
-void spi_cmd(unsigned int data) {
-    //wait for the TXE bit to be set, then send data to the SPI DR register
 
-    while(!(SPI1->SR & SPI_SR_TXE)) {}
-    SPI1->DR = data;
-}
 void spi_data(unsigned int data) {
     spi2_cmd(data | 0x200);
 }
@@ -309,57 +311,92 @@ void init_tim6(void) {
 float volt1 = 0.0;
 float volt2 = 0.0;
 float volt3 = 0.0;
+uint8_t TRANSMIT_DATA[16];
 void TIM6_DAC_IRQHandler(void)
 {
+    char string_display[20];
     // TODO: Remember to acknowledge the interrupt right here.
     TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
     //if sample value is 0, display temperature
+    float temp = 50.65;
+    //temp = get_temp(GPIOA, 3);
+    uint8_t *temp_array;
+    temp_array = (uint8_t*)(&temp);
+    float volume = 32.7;
+    //volume = get_liquid_vol(0.03);
+    uint8_t *vol_array;
+    vol_array = (uint8_t*)(&volume);
+    float turbidity = 3.56;
+    //turbidity = get_turbidity();
+    uint8_t *turbid_array;
+    turbid_array = (uint8_t*)(&turbidity);
+    float batt_percentage = 47.89;
+    //batt_percentage = get_battery_percentage();
+    uint8_t *batt_array;
+    batt_array = (uint8_t*)(&batt_percentage);
+    memcpy(TRANSMIT_DATA, temp_array, sizeof(temp_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array), vol_array, sizeof(vol_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array), turbid_array, sizeof(turbid_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array) + sizeof(turbid_array), batt_array, sizeof(batt_array));
+
+    //uint8_t DATA_TX_BUFFER[4] = {(uint8_t *)temp, (uint8_t *)volume, (uint8_t *)turbidity, (uint8_t *)batt_percentage };
+#define CONTINUOUS
+#if defined(CONTINUOUS)
+    HAL_UART_Transmit_IT(&huart3, TRANSMIT_DATA, sizeof(TRANSMIT_DATA));
+#endif
     if(sample == 0) {
-        char temp_str[100];
-        float temp;
-        int temp_pins[4] = {3, 9, 10, 8};
-        temp_init(GPIOA, temp_pins);
-        temp = get_temp(GPIOA, 3);
-        sprintf(temp_str, "%2.2f", temp);
+        //spi2_cmd(0x02);
+        //spi2_cmd(0x0c);
+        spi2_display1("Good Day!       ");
+        spi2_display2("                  ");
+        //spi2_cmd(0x0c);
+    }
+    else if(sample == 1) {
+        //char temp_str[100];
+        sprintf(string_display, "%2.2f", temp);
         spi2_display1("Temperature:     ");
-        strcat(temp_str, " degrees C");
-        spi2_display2(temp_str);
-        sample = 1;
+        strcat(string_display, " degrees C     ");
+        spi2_display2(string_display);
+        //uint8_t * TEMP_TX_BUFFER = (uint8_t *)temp_str;
+        //HAL_UART_Transmit_IT(&huart3, TEMP_TX_BUFFER, sizeof(TEMP_TX_BUFFER));
+
+        //sample = 1;
     }
     //if sample value is 1, display liquid level
-    else if(sample == 1) {
-        char vol_str[100];
-        float volume;
-        volume = get_liquid_vol(0.03);
-        sprintf(vol_str, "%2.2f", volt1);
+    else if(sample == 2) {
+        //char vol_str[100];
+        sprintf(string_display, "%2.2f", volume);
         spi2_display1("Liquid Level:    ");
-        strcat(vol_str, " V        ");
-        spi2_display2(vol_str);
-        sample = 2;
+        strcat(string_display, " mL            ");
+        spi2_display2(string_display);
+        //uint8_t * WATER_TX_BUFFER = (uint8_t *)vo_str;
+        //HAL_UART_Transmit_IT(&huart3, WATER_TX_BUFFER, sizeof(WATER_TX_BUFFER));
+        //sample = 2;
     }
     //if sample value is 2, display turbidity
-    else if(sample == 2) {
-        char turbid_str[100];
-        float turbidity;
-        turbidity = get_turbidity();
-        sprintf(turbid_str, "%2.2f", volt2);
+    else if(sample == 3) {
+        //char turbid_str[100];
+        sprintf(string_display, "%2.2f", turbidity);
         spi2_display1("Turbidity:         ");
-        strcat(turbid_str, " V     ");
-        spi2_display2(turbid_str);
-        sample = 3;
+        strcat(string_display, " NTU          ");
+        spi2_display2(string_display);
+        //uint8_t * TURBID_TX_BUFFER = (uint8_t *)turbid_str;
+        //HAL_UART_Transmit_IT(&huart3, TURBID_TX_BUFFER, sizeof(TURBID_TX_BUFFER));
+        //sample = 3;
         //sample = 2;
     }
     //if sample value is 3, display battery level
-    else if(sample == 3){
-        char batt_str[100];
-        float batt_percentage;
-        batt_percentage = get_battery_percentage();
-        sprintf(batt_str, "%2.2f", volt3);
+    else if(sample == 4){
+        //char batt_str[100];
+        sprintf(string_display, "%2.2f", batt_percentage);
         spi2_display1("Battery Level:      ");
-        strcat(batt_str, "V    ");
-        spi2_display2(batt_str);
+        strcat(string_display, "%             ");
+        spi2_display2(string_display);
+        //uint8_t * BATT_TX_BUFFER = (uint8_t *)batt_str;
+        //HAL_UART_Transmit_IT(&huart3, BATT_TX_BUFFER, sizeof(BATT_TX_BUFFER));
 
-        sample = 0;
+
+        //sample = 0;
     }
 /*    init_spi1();
     spi2_init_oled();*/
@@ -740,17 +777,54 @@ uint8_t TX_BUFFER3[6] = {'L', 'E', 'D', ' ', 'O', 'N'};
 uint8_t TX_BUFFER4[7] = {'L', 'E', 'D', ' ', 'O', 'F', 'F'};
 //uint8_t TX_BUFFER5[10] = {'A','T'};
 int ron = 0;
+float user_tmp = 0.0;
+int toggle_tmp = 0;
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
     ron = 1;
-    if(RX_BUFFER[0] == 'O') {
+/*    if(RX_BUFFER[1] == '\n') {
         GPIOC->BSRR |= 0x400;
         HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
     }
     else {
         GPIOC->BSRR |= 0x4000000;
         HAL_UART_Transmit_IT(&huart3, TX_BUFFER4, sizeof(TX_BUFFER4));
+    }*/
+    //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    switch(RX_BUFFER[0]) {
+        case 'D': //character to change display
+          //code to update display
+        switch(RX_BUFFER[1]) {
+        case 'T':
+            sample = 1;
+            break;
+        case 'V':
+            sample = 2;
+            break;
+        case 'U':
+            sample = 3;
+            break;
+        case 'B':
+            sample = 4;
+            break;
+        default:
+            sample = 0;
+            break;
+        }
+        break;
+        case 'T': //character to update temperature
+            //code to update temperature
+            user_tmp = 0.0;
+        break;
+        case 'N': //character to toggle temperature
+           //code to toggle temperature
+            toggle_tmp = 0;
+        break;
+        case 'R':
+            HAL_UART_Transmit_IT(&huart3, TRANSMIT_DATA, sizeof(TRANSMIT_DATA));
+        break;
     }
     HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+
 }
 
 // time in us
@@ -861,6 +935,8 @@ int temp_init(GPIO_TypeDef* GPIO, int pin_nums[4])
         }
     }
     GPIO -> OTYPER |=  0x1 << pin_nums[0];   // Set temp sense pin open drain
+
+    // IMPORTANT SET LOW ON START UP
     GPIO -> BRR |= (0x1 << pin_nums[3]);
     GPIO -> BRR |= (0x1 << pin_nums[1]);
     GPIO -> BRR |= (0x1 << pin_nums[2]);
@@ -991,7 +1067,7 @@ int main(void) {
     init_adc();
 }
 #endif
-#define TEST_UART
+//#define TEST_UART
 #if defined(TEST_UART)
 #include <stdio.h>
 /*
@@ -1191,8 +1267,98 @@ int main(void) {
     HAL_Init();
     enable_gpio_ports();
     init_usart3();
+    //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
+
+}
+#endif
+uint8_t TRANSMIT[12];
+//#define CONCAT
+#if defined(CONCAT)
+int main(void) {
+    HAL_Init();
+    init_usart3();
+
+    /*uint8_t BUFF1[4] = {'H', 'E', 'L', 'L'};
+    uint8_t BUFF2[4] = {'O', ' ', 'T', 'H'};
+    uint8_t BUFF3[4] = {'E', 'R', 'E', ' '};
+    //uint8_t TRANSMIT[12];
+    int size = sizeof(BUFF1);
+    memcpy(TRANSMIT, BUFF1, sizeof(BUFF1));
+    memcpy(TRANSMIT + sizeof(BUFF1), BUFF2, sizeof(BUFF2));
+    memcpy(TRANSMIT + sizeof(BUFF1) + sizeof(BUFF2), BUFF3, sizeof(BUFF3));
+    HAL_UART_Transmit_IT(&huart3, TRANSMIT, sizeof(TRANSMIT)); //transmit only works with global arrays*/
+    //HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
+    float temp = 50.65;
+    //temp = get_temp(GPIOA, 3);
+    uint8_t *temp_array;
+    temp_array = (uint8_t*)(&temp);
+    float volume = 32.7;
+    //volume = get_liquid_vol(0.03);
+    uint8_t *vol_array;
+    vol_array = (uint8_t*)(&volume);
+    float turbidity = 4.32;
+    //turbidity = get_turbidity();
+    uint8_t *turbid_array;
+    turbid_array = (uint8_t*)(&turbidity);
+    float batt_percentage = 47.9;
+    //batt_percentage = get_battery_percentage();
+    uint8_t *batt_array;
+    batt_array = (uint8_t*)(&batt_percentage);
+    memcpy(TRANSMIT_DATA, temp_array, sizeof(temp_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array), vol_array, sizeof(vol_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array), turbid_array, sizeof(turbid_array));
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array) + sizeof(turbid_array), batt_array, sizeof(batt_array));
+    HAL_UART_Transmit_IT(&huart3, TRANSMIT_DATA, sizeof(TRANSMIT_DATA));
+
+
+
+
+}
+#endif
+//#define GYRO
+#if defined(GYRO)
+int main(void) {
+    HAL_Init();
+    init_spi1();
+    int gyro = get_gyro_value();
+}
+#endif
+#define PRODUCTION
+#if defined(PRODUCTION)
+int main(void){
+
+    //SPI DISPLAY INIT
+    init_spi2();
+    spi2_init_oled();
+
+    //ADC INIT
+    init_adc();
+    init_tim2();
+    init_tim3();
+    init_tim14();
+
+
+    //TEMP Init
+    int temp_pins[4] = {3, 9, 10, 8};
+    temp_init(GPIOA, temp_pins);
+
+    //CHARGE Init
+    GPIOA -> BRR |= (0x1 << 11); // Make sure wireless charging is enabled
+    GPIOA -> BRR |= (0x1 << 12); //make sure Iset is low (wired charging current is at max)
+
+    //HAL/UART Init
+    HAL_Init();
+    init_usart3();
     HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
-    HAL_UART_Transmit_IT(&huart3, TX_BUFFER5, sizeof(TX_BUFFER5));
+
+
+    //MAIN LOOP
+    init_tim6();
+
+
+
+
 
 }
 #endif
