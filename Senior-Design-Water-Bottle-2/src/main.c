@@ -1025,7 +1025,7 @@ int main() {
 
     //init_tim15();
 
-    /*HAL_Init();
+    HAL_Init();
     //enable_gpio_ports();
     //init_exti();
     sample = 0;
@@ -1045,9 +1045,9 @@ int main() {
 
     spi2_display1("Good Day! ");
 
-    init_tim6();*/
+    init_tim6();
 
-    init_spi2();
+/*    init_spi2();
     spi2_init_oled();
     //enable_gpio_ports();
     int temp_pins[4] = {3, 9, 10, 8};
@@ -1062,7 +1062,7 @@ int main() {
     strcat(temp_str, " degrees C");
     spi2_display2(temp_str);
     //init_exti();
-    spi2_display1("Me alive");
+    spi2_display1("Me alive");*/
 
     //int temp_pins[4] = {3, 9, 10, 8};
         //temp_init(GPIOA, temp_pins);
