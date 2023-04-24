@@ -317,6 +317,8 @@ float volt3 = 0.0;
 uint8_t TRANSMIT_DATA[20];
 float bottle_temp;
 int batt_save = 0;
+float volume = 0.0;
+int get_water = 0;
 void TIM6_DAC_IRQHandler(void)
 {
     char string_display[20];
@@ -324,9 +326,13 @@ void TIM6_DAC_IRQHandler(void)
     TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
     //if sample value is 0, display temperature
     bottle_temp = 50.65;
-    float volume = 32.7;
-    //volume = get_liquid_vol();
-    //bottle_temp = get_temp(GPIOA, 3);
+    //float volume = 32.7;
+/*    if(get_water) {
+        //volume = get_liquid_vol();
+        get_water = 0;
+    }*/
+    volume = get_liquid_vol();
+    bottle_temp = get_temp(GPIOA, 3);
     int temp_pins[4] = {3, 9, 10, 8};
     heat_cool(GPIOA, temp_pins);\
     uint8_t temp_array[5];
@@ -359,7 +365,7 @@ void TIM6_DAC_IRQHandler(void)
     //uint8_t *vol_array;
     //vol_array = (uint8_t*)(&volume);
     float turbidity = 3.56;
-    //turbidity = get_turbidity();
+    turbidity = get_turbidity();
 /*    union {
         float turbid_fl;
         uint8_t turbid_array[4];
@@ -378,7 +384,7 @@ void TIM6_DAC_IRQHandler(void)
     if(batt_percentage < 15.0) {
         batt_save = 1;
     }
-    //batt_percentage = get_battery_percentage();
+    batt_percentage = get_battery_percentage();
     uint8_t batt_array[5];
     char batt_string[20];
     sprintf(batt_string, "%2.3f", batt_percentage);
@@ -741,7 +747,8 @@ void init_dac(void) {
     DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1; //trigger the conversion
 }
 //setup code for UART (for Bluetooth)
-uint8_t RX_BUFFER[6];
+uint8_t RX_BUFFER[8];
+
 uint8_t TX_BUFFER1[10];
 uint8_t TX_BUFFER2[10];
 void init_usart3(void) {
@@ -793,6 +800,7 @@ void Error_Handler(void) {
     error = 1;
 }
 int on = 0;
+int test = 0;
 uint8_t TX_BUFFER5[2] = {'A','T' };
 //goes to this function once transmission is complete
 void HAL_UART_TxCpltCallback(UART_HandleTypeDef *huart) {
@@ -807,17 +815,23 @@ uint8_t TX_BUFFER4[7] = {'L', 'E', 'D', ' ', 'O', 'F', 'F'};
 int ron = 0;
 float user_tmp = 0.0;
 int toggle_tmp = 0;
+
+#define packet_size 6
+//#define TEST
 void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
-    ron = 1;
-/*    if(RX_BUFFER[1] == '\n') {
+    ron++;
+#if defined(TEST)
+    if(ron == 2) {
         GPIOC->BSRR |= 0x400;
         HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
     }
     else {
         GPIOC->BSRR |= 0x4000000;
         HAL_UART_Transmit_IT(&huart3, TX_BUFFER4, sizeof(TX_BUFFER4));
-    }*/
+    }
+#endif
     //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    char toggle[1];
     char temp_buff[5];
     switch(RX_BUFFER[0]) {
         case 'D': //character to change display
@@ -844,16 +858,13 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
             //code to update temperature
             //decode bytes to float
 
-/*            TEMP_BUFF[0] = RX_BUFFER[4];
-            TEMP_BUFF[1] = RX_BUFFER[3];
-            TEMP_BUFF[2] = RX_BUFFER[2];
-            TEMP_BUFF[3] = RX_BUFFER[1];*/
+
             temp_buff[0] = RX_BUFFER[1];
             temp_buff[1] = RX_BUFFER[2];
             temp_buff[2] = RX_BUFFER[3];
             temp_buff[3] = RX_BUFFER[4];
             temp_buff[4] = RX_BUFFER[5];
-            sscanf(temp_buff, "%f", &user_tmp);
+            sscanf(temp_buff, "%5f", &user_tmp);
 
 
 
@@ -863,14 +874,32 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         case 'N': //character to toggle temperature
            //code to toggle temperature
             //is yes or no
-            toggle_tmp = RX_BUFFER[1];
+            toggle[0] = RX_BUFFER[1];
+            sscanf(toggle, "%f", &toggle_tmp);
+            //toggle_tmp = RX_BUFFER[1];
 
         break;
         case 'R':
             HAL_UART_Transmit_IT(&huart3, TRANSMIT_DATA, sizeof(TRANSMIT_DATA));
         break;
+        case 'W':
+            get_water = 1;
+        break;
+
     }
-    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    //RX_BUFFER[0] = 0x00;
+    /*RX_BUFFER[1] = 0x00;
+    RX_BUFFER[2] = 0x00;
+    RX_BUFFER[3] = 0x00;
+    RX_BUFFER[4] = 0x00;
+    RX_BUFFER[5] = 0x00;
+*/
+    init_usart3();
+    HAL_UART_Receive_IT(&huart3, RX_BUFFER, packet_size);
+/*    USART3->CR1 |= 0x120;
+    USART3->CR3 |= 0x1;*/
+
+    //test = 1;
 
 }
 
@@ -1127,6 +1156,7 @@ int lvl_hist_pos = 0;
 // Dimensions in mm
 #define BOTTLE_LENGTH 11
 #define BOTTLE_WIDTH  11
+#define BOTTLE_FULL 20.5
 
 // Gets sensor measurement of liquid level and returns liquid volume in mL
 // IMPORTANT DO BEFORE TEMP CONTROL
@@ -1138,7 +1168,7 @@ float get_liquid_vol() {
     //Turn on 5v supply for sensor and time for boost to settle
     GPIOA -> BRR  |= (0x1 << 9) | (0x1 << 10); // Disconnect peltier before taking temp measurement
     GPIOA -> BSRR |= 0x1 << 8;
-    //nano_wait(4*1000000); // Wait 4ms to settle (probably too much or not even necessary but *shrug*)
+    nano_wait(10*1000000); // Wait 10ms to settle (probably too much or not even necessary but *shrug*)
 
     //Send min 10us long pulse on trigger to start measurement
     TIM2 -> CNT = 0x0; // Reset count
@@ -1150,7 +1180,7 @@ float get_liquid_vol() {
     }
     GPIOB -> BRR |= 0x1 << 3;
 
-    //Catch rising edge of echo (waits until PA4 goes high)
+    //Catch rising edge of echo (waits until PB4 goes high)
     while(!(GPIOB -> IDR & GPIO_IDR_4) && (time_out < TIMEOUT_TIM))
     {
         time_out++;
@@ -1423,15 +1453,16 @@ int main(void) {
 
 }
 #endif
-#define BLUETOOTH
+//#define BLUETOOTH
 #if defined(BLUETOOTH)
 int main(void) {
     HAL_Init();
     init_spi2();
     spi2_init_oled();
-    //enable_gpio_ports();
+    enable_gpio_ports();
     init_usart3();
-    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    HAL_UART_Receive_IT(&huart3, RX_BUFFER, packet_size);
+
     //HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
     init_tim6();
 
@@ -1489,7 +1520,7 @@ int main(void) {
     int gyro = get_gyro_value();
 }
 #endif
-//#define PRODUCTION
+#define PRODUCTION
 #if defined(PRODUCTION)
 int main(void){
 
@@ -1509,6 +1540,9 @@ int main(void){
     //WATER LVL Init
     init_water_lvl();
 
+#if defined(TEST)
+    enable_gpio_ports(); //get rid of before PCB
+#endif
     //CHARGE Init
     GPIOA -> BRR |= (0x1 << 11); // Make sure wireless charging is enabled
     GPIOA -> BRR |= (0x1 << 12); //make sure Iset is low (wired charging current is at max)
@@ -1516,7 +1550,7 @@ int main(void){
     //HAL/UART Init
     HAL_Init();
     init_usart3();
-    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    HAL_UART_Receive_IT(&huart3, RX_BUFFER, packet_size);
 
 
     //MAIN LOOP
