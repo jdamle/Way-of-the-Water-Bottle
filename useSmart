@@ -1,79 +1,140 @@
-/* hooks/useSmartLight.ts */
+const serviceUUID = 0xFFE0;
+const serialUUID = 0xFFE1;
+
+let device;
+let serialCharacteristic;
 
 
-import * as React from "react";
 
-//import {setDevice} from "Bluetooth"
+export async function connect(){
 
-export interface SmartLight {
-  connect: () => void;
-  isConnected: boolean;
-  toggle: () => void;
+    device = await navigator.bluetooth.requestDevice({
+        filters: [{ 
+            services: [serviceUUID]
+        }],
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(serviceUUID);
+
+    serialCharacteristic = await service.getCharacteristic(serialUUID);
+
+    await serialCharacteristic.startNotifications();
+
+    serialCharacteristic.addEventListener('characteristicvaluechanged', read);
+/*
+    document.getElementById('connect').removeEventListener("click", connect);
+    document.getElementById('connect').addEventListener("click", disconnect);
+    document.getElementById('connect').textContent = "Disconnect"; */
 }
 
-export const useSmartLight = (): SmartLight => {
-  console.log("enter")
-  const [isConnected, setIsConnected] = React.useState(false);
-  const [toggleCharacteristic, setToggleCharacteristic] =
-    React.useState<BluetoothRemoteGATTCharacteristic | null>(null);
+export function disconnect(){
+    device.gatt.disconnect();
 
-  const connect = async () => {
+   /*document.getElementById('connect').removeEventListener("click", disconnect);
+    document.getElementById('connect').addEventListener("click", connect);
+    document.getElementById('connect').textContent = "Connect"; */
+}
+
+export async function read(event) {
+    //document.write("enter");  Passed
+   /* let buffer = event.target.value.buffer;
+    let view = new Uint8Array(buffer);
+    let decodedMessage = String.fromCharCode.apply(null, view);
     
-    const device = await navigator.bluetooth.requestDevice({
-      filters: [
-        {
-          namePrefix: "DSD TECH",
-        },
-      ],
-      //acceptAllDevices: true,
-      // Philips Hue Light Control Service
-      //optionalServices: ["932c32bd-0000-47a2-835a-a8d455b859dd"],
+    let newNode = document.createElement('p');
+    newNode.classList.add("received-message");
+    newNode.textContent = decodedMessage;
+
+    document.getElementById("terminal").appendChild(newNode);
+    //document.write(newNode);
+    let placeholder = document.getElementsByClassName('placeholder');
+    if(placeholder.length !== 0) placeholder[0].remove(); */
+    //document.write(decodedMessage);
+    //document.write("decode");
+    //let testing = document.getElementById("message-recieve").value;
+    let value = new TextDecoder().decode(event.target.value);
+    //testing = value;
+    document.getElementById("message-recieve").innerHTML = value;
+    /*let buffer = event.target.value.buffer;
+    let view = new Uint8Array(buffer);
+    let decodedMessage = String.fromCharCode.apply(null, view);
+    
+    
+    document.write("before");
+    readPromise = serialCharacteristic.readValue();
+    document.write(readPromise);
+    readPromise = new Promise((resolve, reject) =>{
+        resolve('Success!');
+        reject('Error');
     });
-    setIsConnected(true);
-    const device_name = device.gatt?.device.name;
-    const server = await device.gatt?.connect();
-    //const service = await server.getPrimaryService(
-   //   "0xFFE0"
-   // );
-    if (device.gatt !== undefined) {
-      console.log("connected");
-      const device_name = device.gatt.device.name;
-      const server = await device.gatt.connect();
-      const service = await server.getPrimaryService(
-        "0xFFE0"
-      );
-  
-      const toggleChar = await service.getCharacteristic(
-        "0xFFE1" // Notify/Write
-      );
-     //device.addEventListener('gattserverdisconnected', onDisconnected)
-      
-      setToggleCharacteristic(toggleChar);
-      setIsConnected(true);
-      //isConnected(true);
+    readPromise(
+        (value) => {
+        document.write("SUCCESS!");
+        document.write(value);
+    },
+    (error) => {
+        document.write("failed ;(");
+        document.write(value);
     }
-    else {
-      console.log("not Connected");
-    }
-    
-    
-    //setServers(server)
-    // Philips Hue Light Control Service
-
-  };
-  /*const onDisconnected = () => {
-    alert("Disconnected")
-    const device = ""
-} */
-  const toggle = async () => {
-    //const currentValue = await toggleCharacteristic?.readValue();
-    //const lightIsCurrentlyOn = currentValue?.getUint8(0) ? true : false;
-
-    await toggleCharacteristic?.writeValue(
-      new Uint8Array([0x4a])
-      //new char(['J']);
     );
-  };
 
-  return { connect, toggle, isConnected };
-};
+    //data = readPromise.resolve();
+
+    
+    //document.write(data);
+    document.write("step");
+    /*readPromise.then((readsuccess) => {
+        document.write(readsuccess);
+        document.write(readPromise);
+    }); */ 
+
+}
+
+
+
+export async function write(event){
+    let message = document.getElementById("message-input").value;
+    //message += '\n';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function setTemp(event){
+    let temp = document.getElementById("temp").value;
+    temp = parseFloat(temp);
+    let buffer = new ArrayBuffer(temp.length);
+    let encodedtemp = new Uint8Array(buffer);
+    //encodedtemp = parseFloat(encodedtemp);
+    document.write(encodedtemp);
+
+    for(let i=0; i<temp.length; i++){
+        document.write(temp[i]);
+        encodedtemp[i] = (temp[i]);
+        /*
+        else {
+            //document.write("decimal");
+            encodedtemp[i] = 0x2e;
+        }*/
+  
+    }
+    //encodedtemp = encodedtemp;
+    
+    document.write(encodedtemp);
+    for(let p=0; p<encodedtemp.length;p++) {
+        await serialCharacteristic.writeValue(encodedtemp);
+    }
+}
+
+/*document.getElementById('connect').addEventListener("click", connect);
+document.getElementById('send').addEventListener("click", write); */
+  
+  
