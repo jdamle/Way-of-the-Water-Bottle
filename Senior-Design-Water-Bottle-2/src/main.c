@@ -13,6 +13,8 @@
 #include "string.h"
 #define _USE_MATH_DEFINES
 #include "math.h"
+#include <errno.h>
+#include  <stdio.h>
 UART_HandleTypeDef huart3;
 
 
@@ -312,7 +314,7 @@ void init_tim6(void) {
 float volt1 = 0.0;
 float volt2 = 0.0;
 float volt3 = 0.0;
-uint8_t TRANSMIT_DATA[16];
+uint8_t TRANSMIT_DATA[20];
 float bottle_temp;
 int batt_save = 0;
 void TIM6_DAC_IRQHandler(void)
@@ -321,49 +323,74 @@ void TIM6_DAC_IRQHandler(void)
     // TODO: Remember to acknowledge the interrupt right here.
     TIM6->SR &= ~TIM_SR_UIF; //acknowledge interrupt;
     //if sample value is 0, display temperature
-    //bottle_temp = 50.65;
+    bottle_temp = 50.65;
     float volume = 32.7;
     //volume = get_liquid_vol();
-    bottle_temp = get_temp(GPIOA, 3);
+    //bottle_temp = get_temp(GPIOA, 3);
     int temp_pins[4] = {3, 9, 10, 8};
-    heat_cool(GPIOA, temp_pins);
-    union {
+    heat_cool(GPIOA, temp_pins);\
+    uint8_t temp_array[5];
+    char temp_string[20];
+    sprintf(temp_string, "%2.3f", bottle_temp);
+    for(int i = 0; i < 5; i++) {
+        temp_array[i] = temp_string[i];
+    }
+
+/*    union {
         float temp_fl;
         uint8_t temp_array[4];
     } u1;
-    u1.temp_fl = bottle_temp;
-    memcpy(TRANSMIT_DATA, u1.temp_array, sizeof(u1.temp_array));
+    u1.temp_fl = bottle_temp;*/
+    memcpy(TRANSMIT_DATA, temp_array, sizeof(temp_array));
     //uint8_t *temp_array;
     //temp_array = (uint8_t*)(&bottle_temp);
-    union {
+    uint8_t vol_array[5];
+    char vol_string[20];
+    sprintf(vol_string, "%2.3f", volume);
+    for(int i = 0; i < 5; i++) {
+        vol_array[i] = vol_string[i];
+    }
+/*    union {
         float vol_fl;
         uint8_t vol_array[4];
     } u2;
-    u2.vol_fl = volume;
-    memcpy(TRANSMIT_DATA + sizeof(u1.temp_array), u2.vol_array, sizeof(u2.vol_array));
+    u2.vol_fl = volume;*/
+    memcpy(TRANSMIT_DATA + sizeof(temp_array), vol_array, sizeof(vol_array));
     //uint8_t *vol_array;
     //vol_array = (uint8_t*)(&volume);
     float turbidity = 3.56;
-    turbidity = get_turbidity();
-    union {
+    //turbidity = get_turbidity();
+/*    union {
         float turbid_fl;
         uint8_t turbid_array[4];
     } u3;
-    u3.turbid_fl = turbidity;
-    memcpy(TRANSMIT_DATA + sizeof(u1.temp_array) + sizeof(u2.vol_array), u3.turbid_array, sizeof(u3.turbid_array));
+    u3.turbid_fl = turbidity;*/
+    uint8_t turbid_array[5];
+    char turbid_string[20];
+    sprintf(turbid_string, "%2.3f", turbidity);
+    for(int i = 0; i < 5; i++) {
+         turbid_array[i] = turbid_string[i];
+    }
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array), turbid_array, sizeof(turbid_array));
     //uint8_t *turbid_array;
     //turbid_array = (uint8_t*)(&turbidity);
     float batt_percentage = 47.89;
     if(batt_percentage < 15.0) {
         batt_save = 1;
     }
-    batt_percentage = get_battery_percentage();
-    union {
+    //batt_percentage = get_battery_percentage();
+    uint8_t batt_array[5];
+    char batt_string[20];
+    sprintf(batt_string, "%2.3f", batt_percentage);
+    for(int i = 0; i < 5; i++) {
+        batt_array[i] = batt_string[i];
+    }
+/*    union {
         float batt_fl;
         uint8_t batt_array[4];
     } u4;
-    u4.batt_fl = batt_percentage;
-    memcpy(TRANSMIT_DATA + sizeof(u1.temp_array) + sizeof(u2.vol_array) + sizeof(u3.turbid_array), u4.batt_array, sizeof(u4.batt_array));
+    u4.batt_fl = batt_percentage;*/
+    memcpy(TRANSMIT_DATA + sizeof(temp_array) + sizeof(vol_array) + sizeof(turbid_array), batt_array, sizeof(batt_array));
    // uint8_t *batt_array;
    // batt_array = (uint8_t*)(&batt_percentage);
     //memcpy(TRANSMIT_DATA, temp_array, sizeof(temp_array));
@@ -714,7 +741,7 @@ void init_dac(void) {
     DAC->SWTRIGR |= DAC_SWTRIGR_SWTRIG1; //trigger the conversion
 }
 //setup code for UART (for Bluetooth)
-uint8_t RX_BUFFER[5];
+uint8_t RX_BUFFER[6];
 uint8_t TX_BUFFER1[10];
 uint8_t TX_BUFFER2[10];
 void init_usart3(void) {
@@ -791,7 +818,7 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
         HAL_UART_Transmit_IT(&huart3, TX_BUFFER4, sizeof(TX_BUFFER4));
     }*/
     //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
-    uint8_t TEMP_BUFF[4] = {0x00, 0x00, 0x00, 0x00};
+    char temp_buff[5];
     switch(RX_BUFFER[0]) {
         case 'D': //character to change display
           //code to update display
@@ -817,13 +844,21 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart) {
             //code to update temperature
             //decode bytes to float
 
-            TEMP_BUFF[0] = RX_BUFFER[4];
+/*            TEMP_BUFF[0] = RX_BUFFER[4];
             TEMP_BUFF[1] = RX_BUFFER[3];
             TEMP_BUFF[2] = RX_BUFFER[2];
-            TEMP_BUFF[3] = RX_BUFFER[1];
+            TEMP_BUFF[3] = RX_BUFFER[1];*/
+            temp_buff[0] = RX_BUFFER[1];
+            temp_buff[1] = RX_BUFFER[2];
+            temp_buff[2] = RX_BUFFER[3];
+            temp_buff[3] = RX_BUFFER[4];
+            temp_buff[4] = RX_BUFFER[5];
+            sscanf(temp_buff, "%f", &user_tmp);
 
 
-            user_tmp = *((float*)TEMP_BUFF);
+
+
+            //user_tmp = *((float*)TEMP_BUFF);
         break;
         case 'N': //character to toggle temperature
            //code to toggle temperature
@@ -1013,6 +1048,7 @@ void heat_cool(GPIO_TypeDef* GPIO, int pin_nums[4])
             }
             else {
                 //turn off all temperature pins
+                toggle_tmp = 0;
                 GPIO -> BRR  |= (0x1 << pin_nums[1]) |
                                 (0x1 << pin_nums[2]) |
                                 (0x1 << pin_nums[3]);
@@ -1031,6 +1067,7 @@ void heat_cool(GPIO_TypeDef* GPIO, int pin_nums[4])
             }
             else {
                 //turn off all temperature pins
+                toggle_tmp = 0;
                 GPIO -> BRR  |= (0x1 << pin_nums[1]) |
                                 (0x1 << pin_nums[2]) |
                                 (0x1 << pin_nums[3]);
@@ -1386,14 +1423,17 @@ int main(void) {
 
 }
 #endif
-//#define BLUETOOTH
+#define BLUETOOTH
 #if defined(BLUETOOTH)
 int main(void) {
     HAL_Init();
-    enable_gpio_ports();
+    init_spi2();
+    spi2_init_oled();
+    //enable_gpio_ports();
     init_usart3();
-    //HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
-    HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
+    HAL_UART_Receive_IT(&huart3, RX_BUFFER, sizeof(RX_BUFFER));
+    //HAL_UART_Transmit_IT(&huart3, TX_BUFFER3, sizeof(TX_BUFFER3));
+    init_tim6();
 
 }
 #endif
@@ -1449,7 +1489,7 @@ int main(void) {
     int gyro = get_gyro_value();
 }
 #endif
-#define PRODUCTION
+//#define PRODUCTION
 #if defined(PRODUCTION)
 int main(void){
 
