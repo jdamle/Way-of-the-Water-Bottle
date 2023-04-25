@@ -1,0 +1,379 @@
+const serviceUUID = 0xFFE0;
+const serialUUID = 0xFFE1;
+
+let device;
+let serialCharacteristic;
+//Waterbottle mas is 2.48 L
+
+
+export async function connect(){
+
+    device = await navigator.bluetooth.requestDevice({
+        filters: [{ 
+            services: [serviceUUID]
+        }],
+    });
+
+    const server = await device.gatt.connect();
+    const service = await server.getPrimaryService(serviceUUID);
+
+    serialCharacteristic = await service.getCharacteristic(serialUUID);
+
+    await serialCharacteristic.startNotifications();
+
+    serialCharacteristic.addEventListener('characteristicvaluechanged', read);
+/*
+    document.getElementById('connect').removeEventListener("click", connect);
+    document.getElementById('connect').addEventListener("click", disconnect);
+    document.getElementById('connect').textContent = "Disconnect"; */
+}
+
+export function disconnect(){
+    device.gatt.disconnect();
+
+   /*document.getElementById('connect').removeEventListener("click", disconnect);
+    document.getElementById('connect').addEventListener("click", connect);
+    document.getElementById('connect').textContent = "Connect"; */
+}
+
+export async function read(event) {
+    //document.write("enter");  Passed
+   /* let buffer = event.target.value.buffer;
+    let view = new Uint8Array(buffer);
+    let decodedMessage = String.fromCharCode.apply(null, view);
+    
+    let newNode = document.createElement('p');
+    newNode.classList.add("received-message");
+    newNode.textContent = decodedMessage;
+
+    document.getElementById("terminal").appendChild(newNode);
+    //document.write(newNode);
+    let placeholder = document.getElementsByClassName('placeholder');
+    if(placeholder.length !== 0) placeholder[0].remove(); */
+    //document.write(decodedMessage);
+    //document.write("decode");
+    //let testing = document.getElementById("message-recieve").value;
+    let value = new TextDecoder().decode(event.target.value);
+
+    let temp = value.slice(0,5);
+    let vol = value.slice(5,10);
+    let turbid = value.slice(10,15);
+    let battery = value.slice(15,20);
+
+    //testing = value;
+    //test = '';
+    //test = test.concat(value[0], value[1], value[2], value[3], value[4]);
+   
+    document.getElementById("temp-msg").innerHTML = temp;
+    document.getElementById("turbidactual").innerHTML = turbid;
+    document.getElementById("vol").innerHTML = vol;
+    document.getElementById("battery").innerHTML = battery;
+
+    /*****
+     * Goal Algorithmn
+     * based on weight and excersie
+     */
+
+
+    let float = new Number(vol);
+    let goalInput = document.getElementById("goalInput").value;
+    let excerInput = document.getElementById("excerInput").value;
+    let excerfloat = new Number(excerInput);
+    let goalFloat = new Number(goalInput);
+    let currentDrink = 2.5 - float;
+    goalFloat = 0.03*(goalFloat) + ((excerfloat/30)*12*0.03);
+    let goal = goalFloat - currentDrink;
+    let goalDisplay;
+    if (goal <= 0) {
+        goalDisplay = "GOAL COMPLETE OR NO GOAL IS SET";
+    }
+    else {
+        goalDisplay = goal;
+    }
+
+    document.getElementById("goal").innerHTML = goalDisplay;
+
+    /**********************
+     * Water Quality Algorithmn
+     * Calculates if water is safe to drink
+     * 
+     */
+    let waterQual = new Number(turbid);
+    let QualDisplay;
+    if (waterQual < 5.00) {
+        QualDisplay = "Safe to drink!"
+    }
+    else {
+        QualDisplay = "NOT SAFE or NOT WATER: PLEASE DUMP OUT IF IT IS WATER"
+    };
+    document.getElementById("turbid").innerHTML = QualDisplay;
+    /*let buffer = event.target.value.buffer;
+    let view = new Uint8Array(buffer);
+    let decodedMessage = String.fromCharCode.apply(null, view);
+    
+    
+    document.write("before");
+    readPromise = serialCharacteristic.readValue();
+    document.write(readPromise);
+    readPromise = new Promise((resolve, reject) =>{
+        resolve('Success!');
+        reject('Error');
+    });
+    readPromise(
+        (value) => {
+        document.write("SUCCESS!");
+        document.write(value);
+    },
+    (error) => {
+        document.write("failed ;(");
+        document.write(value);
+    }
+    );
+
+    //data = readPromise.resolve();
+
+    
+    //document.write(data);
+    document.write("step");
+    /*readPromise.then((readsuccess) => {
+        document.write(readsuccess);
+        document.write(readPromise);
+    }); */ 
+
+}
+
+/************************************
+ * Seting write functions
+ * write: sends any character given "message-input" string from user
+ * setTemp: sends 'T' identifier and number given "temp" string from user to microcontroller 
+ * Max of waterbottle: 2.3 mL
+ *************************************/
+
+export async function write(event){
+    let message = document.getElementById("message-input").value;
+    //message += '\n';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function setTemp(event){
+    let tempInput = '';
+    tempInput = document.getElementById("temp").value;
+    document.getElementById("temp-input").innerHTML = tempInput;
+    //document.write(temp, " after: ")
+    //var tempArray = new Float32Array([temp]);
+    let temp = 'T';
+    for(let a=tempInput.length; a < 5; a++) {
+        temp = temp.concat('0')
+    }
+    temp = temp.concat(tempInput);
+    //document.write(temp)
+    let buffer = new ArrayBuffer(temp.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<temp.length; i++){
+        encodedMessage[i] = (temp.charCodeAt(i));
+    }
+    //document.write(temp);
+    //document.write(" ");
+    //document.write(encodedMessage);
+    //document.write(encodedMessage.length);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+    
+    
+    //temp = Uint8Array(temp);
+    //var tempArray = new Float32Array(1);
+   //const value = new Uint8Array([temp]);
+    //tempArray[0] = temp;
+    //var test = new Uint8Array(tempArray.buffer);
+    //let tempInt = Float32Array.floatToIntBits(tempArray);
+   //document.write("tempInt:", tempInt);
+    //document.write(tempInt, "after Byte: "); 
+    //let buffer = new ArrayBuffer(tempArray.byteLength);
+    //var floatView = new Float32Array(buffer).set(tempArray);
+    //document.write(floatView, "Previous is float")
+    //let encodedtemp = new Uint8Array(buffer);
+    
+    //document.write(encodedtemp);
+    //let test = new Uint8Array(buffer);
+    //document.write(test);
+    //encodedtemp = parseFloat(encodedtemp);
+    //document.write(encodedtemp);
+    /*
+    for(let i=0; i<temp.length; i++){
+        document.write(temp[i]);
+        encodedtemp[i] = (temp[i]);
+        }
+        /*
+        else {
+            //document.write("decimal");
+            encodedtemp[i] = 0x2e;
+        }
+  
+    }
+    //encodedtemp = encodedtemp;
+    
+    document.write(encodedtemp);
+    for(let p=0; p<encodedtemp.length;p++) {
+        await serialCharacteristic.writeValue(encodedtemp);
+    } */
+}
+
+export function decoderead(value) {
+    let temperature = value.split;
+    let test = temperature.concat(value[0], value[1], value[2], value[3], value[4]);
+    return test
+}
+
+/*********************************************
+ * Change Display:
+ * Temperature
+ * Volume
+ * Battery
+ * Turbidity
+ * Home
+ *********************************************/
+
+
+export async function DisplayTemp() {
+    let message = 'DT0000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function DisplayVolume() {
+    let message = 'DV0000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function DisplayTurbid() {
+    let message = 'DU0000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+
+export async function DisplayBattery() {
+    let message = 'DB0000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+
+export async function DisplayHome() {
+    let message = 'DH0000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function TurnOnTemp() {
+    let message = 'N10000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function TurnOffTemp() {
+    let message = 'N00000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function UpdateWaterLevel() {
+    let message = 'W00000';
+    let buffer = new ArrayBuffer(message.length);
+    let encodedMessage = new Uint8Array(buffer);
+    for(let i=0; i<message.length; i++){
+        encodedMessage[i] = (message.charCodeAt(i));
+    }
+    //document.write(" ");
+    //document.write(encodedMessage);
+    for(let x=0; x<encodedMessage.length; x++) {
+        await serialCharacteristic.writeValue(encodedMessage);
+    }
+}
+
+export async function settingNotifs(){
+    setInterval(
+        () => alert("Please Drink Water!"), 10000
+    );
+
+}
+
+/***************
+ * Set Goal Function
+ * Max is 2.5 L
+ ****************/
+
+export function setGoal(){
+
+
+}
+
+/*document.getElementById('connect').addEventListener("click", connect);
+document.getElementById('send').addEventListener("click", write); */
