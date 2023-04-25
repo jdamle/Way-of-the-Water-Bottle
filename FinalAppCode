@@ -1,0 +1,175 @@
+/* App.tsx */
+
+import * as React from "react";
+import {TextInput, Text, StyleSheet, Image} from "react-native";
+//import { useSmartLight} from "./hooks/useSmart";
+import {connect, 
+  disconnect, 
+  setTemp, 
+  DisplayTemp, 
+  DisplayVolume, 
+  DisplayBattery, 
+  DisplayTurbid, 
+  DisplayHome, 
+  TurnOffTemp, 
+  TurnOnTemp,
+  UpdateWaterLevel,
+  setGoal,
+  settingNotifs} from "./hooks/useEdit";
+//var testing = document.getElementById("message");
+//var test = {id="message"};
+
+<script type='text/javascript' src='./hooks/useEdit.js'></script>
+const currentTemp = 0;
+const Goal = 120;
+const currentSet = 0;
+const WaterQuality = 'Good!';
+//let isConnected = false; /*
+export const App = () => {
+  
+
+  //const { connect, toggle, isConnected } = useSmartLight();
+  return (
+    <div
+      style={{
+        height: "100vh",
+        flex: "column",
+        display: "",
+        justifyContent: "center",
+        backgroundColor: '#d4c1f0',
+      }}
+            //sends global input back to useEdit
+            
+     >       
+            <div><Text style={styles.paragraph}>
+             Menu
+            </Text> </div>
+            <div>
+            <Image
+          source={{
+            uri: 'https://i.postimg.cc/kgmFSHGw/Untitled-Artwork.jpg',
+          }}
+          style={{ width: 400, height: 400}}
+        />
+            </div> 
+            <div>
+            <div>
+           <br/><button style={styles.container1} onClick={disconnect}>DISCONNECT</button> 
+           <button style={styles.container1} onClick={connect}>CONNECT</button>
+           </div></div>
+           <div>
+            <Text style={styles.subtext}>
+              Current Temperature: 
+              <span id="temp-msg" > Waiting for Temp in </span>
+              Celcius
+              <br/>
+              Current Temperature Setting: 
+              <span id="temp-input" > No Temperature Input in </span>
+              Celcius
+              <br/>
+              Water Goal progress:  
+              <span id="goal" > Waiting for goal in </span>
+              liters left
+              <br/>
+              Current Water Quality:  
+              <span id="turbid" > Waiting for Quality</span><br/>
+              <span id="turbidactual" > Waiting for Quality</span>
+              NTU <br/>
+              How much Water is in your waterbottle: 
+              <span id="vol" > Waiting for volume in </span>
+              liters 
+              <br/> 
+              Current Battery Level:
+              <span id="battery" > Waiting for battery</span><br/>
+              <br/>
+              Use the textbox below to set a temperature for your drink!
+            </Text>
+           </div>
+           <div> <div>
+           <TextInput  
+            id="temp"/> 
+            <Text style={styles.subtext}> Celsius </Text>
+            <button style={styles.container1} onClick={setTemp}>Send Temperature Setting</button>
+            <button style={styles.container1} onClick={TurnOffTemp}> Turn OFF Heating/Cooling </button>
+            <button style={styles.container1} onClick={TurnOnTemp}> Turn ON Heating/Cooling </button>
+            </div></div>
+            <div></div>
+            <div>
+              <Text style={styles.subtext}>
+                Press Below Button to start Notifications!
+              </Text>
+            </div>
+            <div>
+              <button style={styles.container1} onClick={settingNotifs}> Start Notifications! </button>
+            </div>
+            <div>
+            </div>
+            <div>
+              <Text style={styles.subtext}>
+                Use below textbox to create your goal! Do this by putting in your weight in pounds and how many minutes of excersise you are getting today!
+              </Text>
+              
+            </div>
+            <div>
+              <TextInput
+              id="goalInput"/> pounds 
+              <TextInput
+              id="excerInput"/> min
+            </div>
+            <div>
+              <Text style={styles.subtext}>
+                Use the below buttons to change the display of the Water Bottle!
+              </Text>
+            </div>
+            <div>
+            <button style={styles.container1} onClick={DisplayTemp}> Display Tempurature</button>
+            <button style={styles.container1} onClick={DisplayVolume}> Display Volume </button>
+            <button style={styles.container1} onClick={DisplayBattery}> Display Battery </button>
+            <button style={styles.container1} onClick={DisplayTurbid}> Display Turbidity</button>
+            <button style={styles.container1} onClick={DisplayHome}> Display Home </button>
+            
+            </div>
+            
+            
+ 
+      
+    </div> 
+  );
+};
+
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    justifyContent: 'center',
+    alignSelf: 'center',
+    //paddingTop: Constants.statusBarHeight,
+    backgroundColor: '#d4c1f0',
+    padding: 0,
+  },
+  paragraph: {
+    margin: 300,
+    fontSize: 30,
+    fontWeight: 'bold',
+    textAlign: 'center',
+    alignItems: 'center',
+    fontFamily: 'Georgia',
+    color: '#2b007a',
+  },
+  container1: {
+    flex: 1,
+    alignItems: 'center',
+    alignSelf: 'center',
+    pading: '100', 
+    justifyContent: 'center',
+    backgroundColor: '#8c6bc3',
+    color: '#2b007a',
+  },
+  subtext: {
+    fontSize: 15,
+    fontFamily: 'Georgia-Italic',
+    textAlign: 'left',
+    color: '#2b007a',
+  },
+});
+
+export default App;
